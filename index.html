@@ -1038,7 +1038,6 @@
                 </div>
             </div>
         </div>
-    </div>
 
 
         <!-- Enhanced Analytics Charts -->
@@ -1160,6 +1159,8 @@
             </div>
         </div>
 
+    </div><!-- end dashboard -->
+
     <!-- Member Profile Modal -->
     <div class="modal" id="profileModal">
         <div class="modal-content">
@@ -1261,6 +1262,7 @@
 
             try {
                 const response = await fetch(MEMBER_DATA_CSV);
+                if (!response.ok) throw new Error('HTTP ' + response.status);
                 const csvText = await response.text();
                 
                 allMembers = parseCSV(csvText);
@@ -1279,7 +1281,7 @@
                 
             } catch (error) {
                 console.error('Error loading data:', error);
-                alert('Error loading member data. Check console for details.');
+                alert('Error loading data: ' + (error.message || error) + '\n\nCheck your internet connection and try again.');
                 document.getElementById('loadingIndicator').style.display = 'none';
             }
         }
@@ -1993,6 +1995,312 @@ Upload:
         const savedTemplate = localStorage.getItem('jpos_message_template');
         if (savedTemplate) {
             messageTemplate = savedTemplate;
+        }
+
+        // ============================================================
+        // ENHANCED STATS
+        // ============================================================
+        function updateEnhancedStats() {
+            const today = new Date();
+            let totalAge = 0, ageCount = 0;
+            allMembers.forEach(m => {
+                const dob = m['Date of Birth'];
+                if (!dob) return;
+                const birth = parseDateStr(dob);
+                if (!birth) return;
+                const age = Math.floor((today - birth) / (365.25 * 24 * 60 * 60 * 1000));
+                if (age > 0 && age < 100) { totalAge += age; ageCount++; }
+            });
+            document.getElementById('avgAge').textContent = ageCount > 0 ? Math.round(totalAge / ageCount) + ' yrs' : '--';
+
+            const business = allMembers.filter(m => (m['Employment Type'] || '').toLowerCase() === 'business').length;
+            document.getElementById('businessCount').textContent = business;
+
+            const married = allMembers.filter(m => (m['Marital Status'] || '').toLowerCase() === 'married').length;
+            document.getElementById('marriedCount').textContent = married;
+
+            const areaCounts = {};
+            allMembers.forEach(m => {
+                const area = m.Area || m.area || 'Unknown';
+                areaCounts[area] = (areaCounts[area] || 0) + 1;
+            });
+            const topArea = Object.entries(areaCounts).sort((a, b) => b[1] - a[1])[0];
+            document.getElementById('topArea').textContent = topArea ? topArea[0] : '--';
+        }
+
+        // ============================================================
+        // DATE HELPER
+        // ============================================================
+        function parseDateStr(dateStr) {
+            if (!dateStr) return null;
+            const parts = dateStr.split(/[\/\-\.]/);
+            if (parts.length === 3) {
+                if (parts[0].length <= 2 && parseInt(parts[0]) <= 31) {
+                    const d = new Date(parseInt(parts[2]), parseInt(parts[1]) - 1, parseInt(parts[0]));
+                    if (!isNaN(d)) return d;
+                }
+            }
+            const d = new Date(dateStr);
+            return isNaN(d) ? null : d;
+        }
+
+        // ============================================================
+        // AGE CHART
+        // ============================================================
+        let ageChartInstance = null;
+
+        function renderAgeChart() {
+            const brackets = { '18-25': 0, '26-35': 0, '36-45': 0, '46+': 0, 'Other': 0 };
+            const today = new Date();
+            allMembers.forEach(m => {
+                const birth = parseDateStr(m['Date of Birth']);
+                if (!birth) { brackets['Other']++; return; }
+                const age = Math.floor((today - birth) / (365.25 * 24 * 60 * 60 * 1000));
+                if (age >= 18 && age <= 25) brackets['18-25']++;
+                else if (age >= 26 && age <= 35) brackets['26-35']++;
+                else if (age >= 36 && age <= 45) brackets['36-45']++;
+                else if (age > 45) brackets['46+']++;
+                else brackets['Other']++;
+            });
+
+            const canvas = document.getElementById('ageChart');
+            if (!canvas) return;
+            if (ageChartInstance) ageChartInstance.destroy();
+
+            ageChartInstance = new Chart(canvas, {
+                type: 'bar',
+                data: {
+                    labels: Object.keys(brackets),
+                    datasets: [{ label: 'Members', data: Object.values(brackets), backgroundColor: ['#3b82f6','#10b981','#f59e0b','#ef4444','#6b7280'] }]
+                },
+                options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } }
+            });
+        }
+
+        function filterByAge(range) {
+            const today = new Date();
+            if (range === 'all') {
+                filteredMembers = [...allMembers];
+            } else {
+                const isPlus = range.endsWith('+');
+                const [min, max] = isPlus ? [parseInt(range), 200] : range.split('-').map(Number);
+                filteredMembers = allMembers.filter(m => {
+                    const birth = parseDateStr(m['Date of Birth']);
+                    if (!birth) return false;
+                    const age = Math.floor((today - birth) / (365.25 * 24 * 60 * 60 * 1000));
+                    return age >= min && age <= max;
+                });
+            }
+            currentPage = 1;
+            renderTable();
+        }
+
+        // ============================================================
+        // NATIVE PLACE CHART
+        // ============================================================
+        let nativePlaceChartInstance = null;
+
+        function renderNativePlaceChart() {
+            const placeCounts = {};
+            allMembers.forEach(m => {
+                const place = m['Native Place'] || m.Native || 'Unknown';
+                placeCounts[place] = (placeCounts[place] || 0) + 1;
+            });
+            const sorted = Object.entries(placeCounts).sort((a, b) => b[1] - a[1]).slice(0, 10);
+
+            const canvas = document.getElementById('nativePlaceChart');
+            if (!canvas) return;
+            if (nativePlaceChartInstance) nativePlaceChartInstance.destroy();
+
+            nativePlaceChartInstance = new Chart(canvas, {
+                type: 'bar',
+                data: {
+                    labels: sorted.map(([p]) => p),
+                    datasets: [{ label: 'Members', data: sorted.map(([, v]) => v), backgroundColor: '#8b5cf6' }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { legend: { display: false } },
+                    onClick: (e, elements) => {
+                        if (!elements.length) return;
+                        const label = sorted[elements[0].index][0];
+                        const members = allMembers.filter(m => (m['Native Place'] || m.Native || 'Unknown') === label);
+                        const listDiv = document.getElementById('nativePlaceList');
+                        listDiv.innerHTML = `<strong style="color:#374151">${label}: ${members.length} members</strong>` +
+                            members.map(m => `<div style="padding:5px 0;border-bottom:1px solid #e5e7eb;font-size:0.9em">${m.Name || m.name || 'Unknown'} — ${m.Area || m.area || ''}</div>`).join('');
+                    }
+                }
+            });
+        }
+
+        // ============================================================
+        // AREA BREAKDOWN
+        // ============================================================
+        function renderAreaBreakdown() {
+            const areaGroups = {};
+            allMembers.forEach(m => {
+                const area = m.Area || m.area || 'Unknown';
+                if (!areaGroups[area]) areaGroups[area] = [];
+                areaGroups[area].push(m);
+            });
+
+            const sorted = Object.entries(areaGroups).sort((a, b) => b[1].length - a[1].length);
+            const container = document.getElementById('areaBreakdown');
+            container.innerHTML = sorted.map(([area, members]) => `
+                <div class="area-section">
+                    <div class="area-header" onclick="toggleArea(this)">
+                        <span class="area-title">${area}</span>
+                        <span class="area-count">${members.length} members</span>
+                    </div>
+                    <div class="area-members">
+                        ${members.map(m => `
+                            <div class="member-card">
+                                <div class="member-basic">
+                                    <strong>${m.Name || m.name || 'Unknown'}</strong>
+                                    <small>${m['Member ID'] || m['UID'] || ''} | ${m.Mobile || m.mobile || 'No mobile'}</small>
+                                </div>
+                                <span class="status-badge ${(m['Profile Completed']||'').toLowerCase()==='yes' ? 'status-complete' : 'status-pending'}">
+                                    ${(m['Profile Completed']||'').toLowerCase()==='yes' ? '✓' : '⏳'}
+                                </span>
+                            </div>`).join('')}
+                    </div>
+                </div>`).join('');
+        }
+
+        function toggleArea(header) {
+            header.classList.toggle('active');
+            header.nextElementSibling.classList.toggle('show');
+        }
+
+        function toggleAllAreas() {
+            const btn = document.getElementById('toggleAreasBtn');
+            const expanding = btn.textContent === 'Expand All';
+            document.querySelectorAll('.area-header').forEach(h => expanding ? h.classList.add('active') : h.classList.remove('active'));
+            document.querySelectorAll('.area-members').forEach(m => expanding ? m.classList.add('show') : m.classList.remove('show'));
+            btn.textContent = expanding ? 'Collapse All' : 'Expand All';
+        }
+
+        // ============================================================
+        // BIRTHDAY & ANNIVERSARY REMINDERS
+        // ============================================================
+        let allReminders = [];
+
+        function generateReminders() {
+            allReminders = [];
+            const today = new Date(); today.setHours(0, 0, 0, 0);
+
+            allMembers.forEach(m => {
+                const name = m.Name || m.name || 'Unknown';
+                const area = m.Area || m.area || '';
+                const mobile = m['WhatsApp Number'] || m.Mobile || m.mobile || '';
+
+                const addReminder = (dateStr, label, type) => {
+                    const r = buildReminder(dateStr, name, area, mobile, type, label);
+                    if (r) allReminders.push(r);
+                };
+
+                addReminder(m['Date of Birth'], 'Member Birthday', 'birthday');
+                addReminder(m['Marriage Anniversary'] || m['Anniversary Date'], 'Wedding Anniversary', 'anniversary');
+                if (m['Spouse Name'] && (m['Spouse DOB'] || m['Spouse Date of Birth'])) {
+                    const spouseLabel = `${name} (Spouse: ${m['Spouse Name']})`;
+                    const r = buildReminder(m['Spouse DOB'] || m['Spouse Date of Birth'], spouseLabel, area, mobile, 'spouse', 'Spouse Birthday');
+                    if (r) allReminders.push(r);
+                }
+            });
+
+            allReminders.sort((a, b) => a.daysUntil - b.daysUntil);
+            updateReminderCounts();
+            updateReminders();
+        }
+
+        function buildReminder(dateStr, name, area, mobile, type, label) {
+            const date = parseDateStr(dateStr);
+            if (!date) return null;
+            const today = new Date(); today.setHours(0, 0, 0, 0);
+            const yr = today.getFullYear();
+            let next = new Date(yr, date.getMonth(), date.getDate());
+            next.setHours(0, 0, 0, 0);
+            if (next < today) next.setFullYear(yr + 1);
+            const daysUntil = Math.round((next - today) / 86400000);
+            return { name, area, mobile, type, label, date: next, daysUntil, day: next.getDate(), month: next.toLocaleString('default', { month: 'short' }), originalDate: dateStr };
+        }
+
+        function updateReminderCounts() {
+            document.getElementById('todayCount').textContent = allReminders.filter(r => r.daysUntil === 0).length;
+            document.getElementById('weekCount').textContent = allReminders.filter(r => r.daysUntil <= 7).length;
+            document.getElementById('monthCount').textContent = allReminders.filter(r => r.daysUntil <= 30).length;
+        }
+
+        function updateReminders() {
+            const filter = document.getElementById('reminderFilter').value;
+            let filtered = allReminders;
+            if (filter === 'today') filtered = allReminders.filter(r => r.daysUntil === 0);
+            else if (filter === 'week') filtered = allReminders.filter(r => r.daysUntil <= 7);
+            else if (filter === 'month' || filter === 'upcoming30') filtered = allReminders.filter(r => r.daysUntil <= 30);
+
+            const container = document.getElementById('remindersList');
+            const noReminders = document.getElementById('noReminders');
+
+            if (filtered.length === 0) {
+                container.innerHTML = '';
+                noReminders.style.display = 'block';
+                return;
+            }
+            noReminders.style.display = 'none';
+
+            container.innerHTML = filtered.map(r => {
+                const cardClass = r.daysUntil === 0 ? 'today' : r.daysUntil <= 7 ? 'thisweek' : '';
+                const badgeClass = r.type === 'birthday' ? 'badge-birthday' : r.type === 'anniversary' ? 'badge-anniversary' : r.type === 'spouse' ? 'badge-spouse' : 'badge-child';
+                const daysText = r.daysUntil === 0 ? 'TODAY!' : r.daysUntil === 1 ? 'Tomorrow' : `In ${r.daysUntil} days`;
+                return `
+                    <div class="reminder-card ${cardClass}">
+                        <div class="reminder-info">
+                            <div class="reminder-name">${r.name} <span class="reminder-badge ${badgeClass}">${r.label}</span></div>
+                            <div class="reminder-details">📍 ${r.area} | 📱 ${r.mobile || 'No mobile'} | ${daysText}</div>
+                        </div>
+                        <div class="reminder-date">
+                            <div class="reminder-day">${r.day}</div>
+                            <div class="reminder-month">${r.month}</div>
+                        </div>
+                        <div class="reminder-actions">
+                            ${r.mobile ? `<button class="whatsapp-btn" onclick="sendBirthdayWish('${r.name.replace(/'/g,"\\'")}','${r.mobile}','${r.type}')">📱 Wish</button>` : ''}
+                        </div>
+                    </div>`;
+            }).join('');
+        }
+
+        function sendBirthdayWish(name, mobile, type) {
+            const msg = type === 'anniversary'
+                ? `💍 *Happy Wedding Anniversary ${name}!*\n\nWishing you both a lifetime of love and happiness!\n\n- JPOS Youth Wing`
+                : `🎂 *Happy Birthday ${name}!*\n\nWishing you a wonderful day filled with joy!\n\n- JPOS Youth Wing`;
+            const clean = mobile.replace(/\D/g, '');
+            window.open(`https://wa.me/${clean}?text=${encodeURIComponent(msg)}`, '_blank');
+        }
+
+        function exportReminders() {
+            const filter = document.getElementById('reminderFilter').value;
+            let filtered = allReminders;
+            if (filter === 'today') filtered = allReminders.filter(r => r.daysUntil === 0);
+            else if (filter === 'week') filtered = allReminders.filter(r => r.daysUntil <= 7);
+            else if (filter === 'month' || filter === 'upcoming30') filtered = allReminders.filter(r => r.daysUntil <= 30);
+
+            const data = filtered.map(r => ({ Name: r.name, Type: r.label, Date: r.originalDate, 'Days Until': r.daysUntil, Area: r.area, Mobile: r.mobile }));
+            const ws = XLSX.utils.json_to_sheet(data);
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, 'Reminders');
+            XLSX.writeFile(wb, `Reminders_${new Date().toISOString().split('T')[0]}.xlsx`);
+        }
+
+        function copyReminderNumbers() {
+            const filter = document.getElementById('reminderFilter').value;
+            let filtered = allReminders;
+            if (filter === 'today') filtered = allReminders.filter(r => r.daysUntil === 0);
+            else if (filter === 'week') filtered = allReminders.filter(r => r.daysUntil <= 7);
+            else if (filter === 'month' || filter === 'upcoming30') filtered = allReminders.filter(r => r.daysUntil <= 30);
+
+            const numbers = [...new Set(filtered.map(r => r.mobile).filter(Boolean))].join('\n');
+            navigator.clipboard.writeText(numbers).then(() => alert(`Copied ${numbers.split('\n').filter(Boolean).length} numbers!`));
         }
 
 
