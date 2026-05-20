@@ -1,0 +1,4614 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>JPOS Admin Dashboard - Member Management</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js">
+
+// ============================================================
+// CALCULATE AGE FUNCTION (REQUIRED FOR MULTIPLE FEATURES)
+// ============================================================
+
+function calculateAge(dob) {
+    if (!dob) return null;
+    const birthDate = new Date(dob);
+    const today = new Date();
+    let age = today.getFullYear() - birthDate.getFullYear();
+    const monthDiff = today.getMonth() - birthDate.getMonth();
+    if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
+        age--;
+    }
+    return age;
+}
+
+function calculateAgeFromDate(birthDate) {
+    const today = new Date();
+    let age = today.getFullYear() - birthDate.getFullYear();
+    const monthDiff = today.getMonth() - birthDate.getMonth();
+    if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
+        age--;
+    }
+    return age;
+}
+
+
+// ============================================================
+// ENHANCED QUICK STATS
+// ============================================================
+
+function updateEnhancedStats() {
+    console.log('Updating enhanced stats...');
+    
+    // Check if elements exist
+    if (!document.getElementById('avgAge')) {
+        console.log('Enhanced stats elements not found');
+        return;
+    }
+    
+    // Average Age
+    const ages = allMembers
+        .map(m => calculateAge(m['Date of Birth'] || m['DOB']))
+        .filter(age => age !== null && !isNaN(age));
+    
+    const avgAge = ages.length > 0 
+        ? Math.round(ages.reduce((a, b) => a + b, 0) / ages.length) 
+        : 0;
+    
+    document.getElementById('avgAge').textContent = avgAge > 0 ? avgAge + ' years' : 'N/A';
+
+    // Business Count
+    const businessCount = allMembers.filter(m => 
+        (m['Employment Type'] || '').toLowerCase().includes('business')
+    ).length;
+    
+    document.getElementById('businessCount').textContent = businessCount;
+
+    // Married Count
+    const marriedCount = allMembers.filter(m => 
+        (m['Marital Status'] || '').toLowerCase() === 'married'
+    ).length;
+    
+    document.getElementById('marriedCount').textContent = marriedCount;
+
+    // Top Area
+    const areaCounts = {};
+    allMembers.forEach(m => {
+        const area = m.Area || m.area || 'Unknown';
+        areaCounts[area] = (areaCounts[area] || 0) + 1;
+    });
+    
+    const topArea = Object.entries(areaCounts)
+        .sort((a, b) => b[1] - a[1])[0];
+    
+    document.getElementById('topArea').textContent = topArea 
+        ? `${topArea[0]} (${topArea[1]})` 
+        : 'N/A';
+    
+    console.log('Enhanced stats updated');
+}
+
+
+// ============================================================
+// AREA BREAKDOWN
+// ============================================================
+
+function renderAreaBreakdown() {
+    console.log('Rendering area breakdown...');
+    
+    const container = document.getElementById('areaBreakdown');
+    if (!container) {
+        console.log('Area breakdown container not found');
+        return;
+    }
+    
+    const areaGroups = {};
+    
+    allMembers.forEach(member => {
+        const area = member.Area || member.area || 'Unknown';
+        if (!areaGroups[area]) {
+            areaGroups[area] = [];
+        }
+        areaGroups[area].push(member);
+    });
+
+    const sortedAreas = Object.entries(areaGroups).sort((a, b) => b[1].length - a[1].length);
+    container.innerHTML = '';
+
+    sortedAreas.forEach(([area, members], index) => {
+        const section = document.createElement('div');
+        section.className = 'area-section';
+        section.innerHTML = `
+            <div class="area-header" onclick="toggleArea(${index})">
+                <div class="area-title">📍 ${area}</div>
+                <div class="area-count">${members.length} members</div>
+            </div>
+            <div class="area-members" id="area-${index}">
+                ${members.map(m => {
+                    const memberIndex = allMembers.findIndex(am => 
+                        (am['Member ID'] || am['UID']) === (m['Member ID'] || m['UID'])
+                    );
+                    return `
+                        <div class="member-card">
+                            <div class="member-basic">
+                                <strong>${m.Name || m.name || 'N/A'}</strong>
+                                <small>ID: ${m['Member ID'] || m['UID'] || 'N/A'} | 
+                                      Mobile: ${m.Mobile || m.mobile || 'N/A'} | 
+                                      ${(m['Profile Completed'] || '').toLowerCase() === 'yes' ? '✓ Complete' : '⏳ Pending'}
+                                </small>
+                            </div>
+                            <button class="view-btn" onclick="viewProfile(${memberIndex})">View</button>
+                        </div>
+                    `;
+                }).join('')}
+            </div>
+        `;
+        container.appendChild(section);
+    });
+    
+    console.log('Area breakdown rendered');
+}
+
+function toggleArea(index) {
+    const members = document.getElementById(`area-${index}`);
+    const header = members.previousElementSibling;
+    members.classList.toggle('show');
+    header.classList.toggle('active');
+}
+
+function toggleAllAreas() {
+    const allAreas = document.querySelectorAll('.area-members');
+    const allHeaders = document.querySelectorAll('.area-header');
+    const btn = document.getElementById('toggleAreasBtn');
+    
+    const anyExpanded = Array.from(allAreas).some(a => a.classList.contains('show'));
+    
+    if (anyExpanded) {
+        allAreas.forEach(a => a.classList.remove('show'));
+        allHeaders.forEach(h => h.classList.remove('active'));
+        btn.textContent = 'Expand All';
+    } else {
+        allAreas.forEach(a => a.classList.add('show'));
+        allHeaders.forEach(h => h.classList.add('active'));
+        btn.textContent = 'Collapse All';
+    }
+}
+
+
+// ============================================================
+// AGE DISTRIBUTION CHART
+// ============================================================
+
+function renderAgeChart() {
+    console.log('Rendering age chart...');
+    
+    const canvas = document.getElementById('ageChart');
+    if (!canvas) {
+        console.log('Age chart canvas not found');
+        return;
+    }
+    
+    const ageGroups = {
+        'Under 18': 0, '18-25': 0, '26-35': 0,
+        '36-45': 0, '46-55': 0, '56+': 0, 'Not Specified': 0
+    };
+
+    allMembers.forEach(m => {
+        const dob = m['Date of Birth'] || m['DOB'];
+        if (!dob) {
+            ageGroups['Not Specified']++;
+            return;
+        }
+        const age = calculateAge(dob);
+        if (age === null || isNaN(age)) {
+            ageGroups['Not Specified']++;
+        } else if (age < 18) ageGroups['Under 18']++;
+        else if (age <= 25) ageGroups['18-25']++;
+        else if (age <= 35) ageGroups['26-35']++;
+        else if (age <= 45) ageGroups['36-45']++;
+        else if (age <= 55) ageGroups['46-55']++;
+        else ageGroups['56+']++;
+    });
+
+    new Chart(canvas, {
+        type: 'bar',
+        data: {
+            labels: Object.keys(ageGroups),
+            datasets: [{
+                label: 'Members',
+                data: Object.values(ageGroups),
+                backgroundColor: ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#94a3b8']
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: { legend: { display: false } },
+            scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } } }
+        }
+    });
+    
+    console.log('Age chart rendered');
+}
+
+function filterByAge(range) {
+    if (range === 'all') {
+        filteredMembers = [...allMembers];
+    } else {
+        filteredMembers = allMembers.filter(m => {
+            const dob = m['Date of Birth'] || m['DOB'];
+            if (!dob) return false;
+            const age = calculateAge(dob);
+            if (age === null || isNaN(age)) return false;
+            
+            switch(range) {
+                case '18-25': return age >= 18 && age <= 25;
+                case '26-35': return age >= 26 && age <= 35;
+                case '36-45': return age >= 36 && age <= 45;
+                case '46+': return age >= 46;
+                default: return true;
+            }
+        });
+    }
+    
+    currentPage = 1;
+    renderTable();
+    
+    event.target.parentElement.querySelectorAll('.btn-sm').forEach(btn => {
+        btn.classList.remove('btn-primary');
+        btn.classList.add('btn-secondary');
+    });
+    event.target.classList.remove('btn-secondary');
+    event.target.classList.add('btn-primary');
+}
+
+
+// ============================================================
+// NATIVE PLACE CHART
+// ============================================================
+
+let nativePlaceChartInstance = null;
+
+function renderNativePlaceChart() {
+    console.log('Rendering native place chart...');
+    
+    const canvas = document.getElementById('nativePlaceChart');
+    if (!canvas) {
+        console.log('Native place chart canvas not found');
+        return;
+    }
+    
+    const nativeCounts = {};
+    allMembers.forEach(m => {
+        const native = m['Native Place'] || m['Native'] || m['native'] || 'Not Specified';
+        nativeCounts[native] = (nativeCounts[native] || 0) + 1;
+    });
+
+    const sortedNatives = Object.entries(nativeCounts).sort((a, b) => b[1] - a[1]).slice(0, 10);
+    
+    if (nativePlaceChartInstance) nativePlaceChartInstance.destroy();
+
+    nativePlaceChartInstance = new Chart(canvas, {
+        type: 'bar',
+        data: {
+            labels: sortedNatives.map(n => n[0]),
+            datasets: [{ label: 'Members', data: sortedNatives.map(n => n[1]), backgroundColor: '#10b981' }]
+        },
+        options: {
+            indexAxis: 'y',
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: { legend: { display: false } },
+            onClick: (event, elements) => {
+                if (elements.length > 0) {
+                    const index = elements[0].index;
+                    filterByNativePlace(sortedNatives[index][0]);
+                }
+            }
+        }
+    });
+
+    updateNativePlaceList(nativeCounts);
+    console.log('Native place chart rendered');
+}
+
+function updateNativePlaceList(nativeCounts) {
+    const container = document.getElementById('nativePlaceList');
+    if (!container) return;
+    
+    const sortedAll = Object.entries(nativeCounts).sort((a, b) => b[1] - a[1]);
+    
+    container.innerHTML = `
+        <div style="margin-top: 10px;">
+            <strong style="color: #374151;">All Native Places (click to filter):</strong>
+            ${sortedAll.map(([place, count]) => `
+                <div style="display: flex; justify-content: space-between; padding: 8px 5px; cursor: pointer; border-bottom: 1px solid #f3f4f6;"
+                     onclick="filterByNativePlace('${place.replace(/'/g, "\\'")}')"
+                     onmouseover="this.style.background='#f3f4f6'"
+                     onmouseout="this.style.background='white'">
+                    <span style="color: #374151;">${place}</span>
+                    <strong style="color: #3b82f6;">${count}</strong>
+                </div>
+            `).join('')}
+        </div>
+    `;
+}
+
+function filterByNativePlace(place) {
+    filteredMembers = allMembers.filter(m => {
+        const native = m['Native Place'] || m['Native'] || m['native'];
+        return native === place;
+    });
+    currentPage = 1;
+    renderTable();
+    alert(`Filtered by Native Place: ${place}\nShowing ${filteredMembers.length} members`);
+}
+
+
+// ============================================================
+// BIRTHDAY & ANNIVERSARY REMINDERS
+// ============================================================
+
+let allReminders = [];
+
+function generateReminders() {
+    console.log('Generating reminders...');
+    
+    if (!document.getElementById('remindersList')) {
+        console.log('Reminders container not found');
+        return;
+    }
+    
+    allReminders = [];
+    const today = new Date();
+
+    allMembers.forEach(member => {
+        const memberId = member['Member ID'] || member['UID'];
+        const memberName = member.Name || member.name || 'Unknown';
+        const mobile = member.Mobile || member.mobile || '';
+
+        // Member Birthday
+        const dob = member['Date of Birth'] || member['DOB'];
+        if (dob) {
+            const birthday = parseDate(dob);
+            if (birthday) {
+                const nextBirthday = getNextOccurrence(birthday, today);
+                const age = calculateAge(dob);
+                allReminders.push({
+                    memberId, name: memberName, type: 'Birthday',
+                    date: nextBirthday, daysUntil: getDaysUntil(nextBirthday, today),
+                    details: `${memberName}'s Birthday${age ? ` (Turning ${age + 1})` : ''}`,
+                    mobile, actualDate: birthday
+                });
+            }
+        }
+
+        // Marriage Anniversary
+        const marriageDate = member['Date of Marriage'];
+        const maritalStatus = (member['Marital Status'] || '').toLowerCase();
+        if (marriageDate && maritalStatus === 'married') {
+            const anniversary = parseDate(marriageDate);
+            if (anniversary) {
+                const nextAnniversary = getNextOccurrence(anniversary, today);
+                const years = today.getFullYear() - anniversary.getFullYear();
+                allReminders.push({
+                    memberId, name: memberName, type: 'Anniversary',
+                    date: nextAnniversary, daysUntil: getDaysUntil(nextAnniversary, today),
+                    details: `${memberName}'s ${years > 0 ? years + ' Year ' : ''}Wedding Anniversary`,
+                    mobile, actualDate: anniversary
+                });
+            }
+        }
+
+        // Spouse Birthday
+        const spouseDOB = member['Spouse DOB'];
+        const spouseName = member['Spouse Name'];
+        if (spouseDOB && spouseName && maritalStatus === 'married') {
+            const spouseBirthday = parseDate(spouseDOB);
+            if (spouseBirthday) {
+                const nextSpouseBday = getNextOccurrence(spouseBirthday, today);
+                allReminders.push({
+                    memberId, name: memberName, type: 'Spouse Birthday',
+                    date: nextSpouseBday, daysUntil: getDaysUntil(nextSpouseBday, today),
+                    details: `${spouseName}'s Birthday (Spouse of ${memberName})`,
+                    mobile, actualDate: spouseBirthday
+                });
+            }
+        }
+
+        // Children Birthdays
+        for (let i = 1; i <= 3; i++) {
+            const childName = member[`Child ${i} Name`];
+            const childDOB = member[`Child ${i} DOB`];
+            if (childName && childDOB) {
+                const childBirthday = parseDate(childDOB);
+                if (childBirthday) {
+                    const nextChildBday = getNextOccurrence(childBirthday, today);
+                    const childAge = calculateAgeFromDate(childBirthday);
+                    allReminders.push({
+                        memberId, name: memberName, type: 'Child Birthday',
+                        date: nextChildBday, daysUntil: getDaysUntil(nextChildBday, today),
+                        details: `${childName}'s Birthday (Child of ${memberName})${childAge !== null ? ` - Turning ${childAge + 1}` : ''}`,
+                        mobile, actualDate: childBirthday
+                    });
+                }
+            }
+        }
+    });
+
+    allReminders.sort((a, b) => a.daysUntil - b.daysUntil);
+    updateReminders();
+    updateReminderStats();
+    console.log('Reminders generated:', allReminders.length);
+}
+
+function parseDate(dateStr) {
+    if (!dateStr) return null;
+    let date = new Date(dateStr);
+    if (isNaN(date.getTime())) {
+        const parts = dateStr.split(/[-/]/);
+        if (parts.length === 3) date = new Date(parts[2], parts[1] - 1, parts[0]);
+    }
+    return isNaN(date.getTime()) ? null : date;
+}
+
+function getNextOccurrence(date, today) {
+    const nextDate = new Date(today.getFullYear(), date.getMonth(), date.getDate());
+    if (nextDate < today) nextDate.setFullYear(today.getFullYear() + 1);
+    return nextDate;
+}
+
+function getDaysUntil(futureDate, today) {
+    const oneDay = 24 * 60 * 60 * 1000;
+    const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+    const futureDateStart = new Date(futureDate.getFullYear(), futureDate.getMonth(), futureDate.getDate());
+    return Math.round((futureDateStart - todayStart) / oneDay);
+}
+
+function updateReminders() {
+    const filter = document.getElementById('reminderFilter');
+    if (!filter) return;
+    
+    const container = document.getElementById('remindersList');
+    const noRemindersDiv = document.getElementById('noReminders');
+    
+    let filteredReminders = [];
+    const filterValue = filter.value;
+    
+    switch(filterValue) {
+        case 'today': filteredReminders = allReminders.filter(r => r.daysUntil === 0); break;
+        case 'week': filteredReminders = allReminders.filter(r => r.daysUntil >= 0 && r.daysUntil <= 7); break;
+        case 'month': filteredReminders = allReminders.filter(r => r.daysUntil >= 0 && r.daysUntil <= 30); break;
+        case 'upcoming30': filteredReminders = allReminders.filter(r => r.daysUntil >= 0 && r.daysUntil <= 30); break;
+        case 'all': filteredReminders = allReminders.filter(r => r.daysUntil >= 0 && r.daysUntil <= 365); break;
+    }
+
+    if (filteredReminders.length === 0) {
+        container.innerHTML = '';
+        noRemindersDiv.style.display = 'block';
+        return;
+    }
+
+    noRemindersDiv.style.display = 'none';
+    container.innerHTML = filteredReminders.map(reminder => {
+        const cardClass = reminder.daysUntil === 0 ? 'today' : reminder.daysUntil <= 7 ? 'thisweek' : '';
+        const badgeClass = reminder.type === 'Birthday' ? 'badge-birthday' :
+                          reminder.type === 'Anniversary' ? 'badge-anniversary' :
+                          reminder.type === 'Spouse Birthday' ? 'badge-spouse' : 'badge-child';
+        const dateStr = reminder.date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+        const urgencyText = reminder.daysUntil === 0 ? '🎉 TODAY!' :
+                           reminder.daysUntil === 1 ? '⏰ TOMORROW' : `In ${reminder.daysUntil} days`;
+
+        return `
+            <div class="reminder-card ${cardClass}">
+                <div class="reminder-info">
+                    <div class="reminder-name">
+                        ${reminder.details}
+                        <span class="reminder-badge ${badgeClass}">${reminder.type}</span>
+                    </div>
+                    <div class="reminder-details">
+                        📅 ${dateStr} • ${urgencyText} • ID: ${reminder.memberId} • 📱 ${reminder.mobile || 'No mobile'}
+                    </div>
+                </div>
+                <div class="reminder-date">
+                    <div class="reminder-day">${reminder.date.getDate()}</div>
+                    <div class="reminder-month">${reminder.date.toLocaleDateString('en-US', { month: 'short' })}</div>
+                </div>
+                <div class="reminder-actions">
+                    <button class="view-btn" onclick="viewMemberByIdFromReminder('${reminder.memberId}')">View</button>
+                    ${reminder.mobile ? `<button class="btn btn-success btn-sm" onclick="sendWhatsAppReminder('${reminder.mobile}', '${reminder.name}', '${reminder.type}')">WhatsApp</button>` : ''}
+                </div>
+            </div>
+        `;
+    }).join('');
+}
+
+function updateReminderStats() {
+    const todayEl = document.getElementById('todayCount');
+    const weekEl = document.getElementById('weekCount');
+    const monthEl = document.getElementById('monthCount');
+    
+    if (todayEl) todayEl.textContent = allReminders.filter(r => r.daysUntil === 0).length;
+    if (weekEl) weekEl.textContent = allReminders.filter(r => r.daysUntil >= 0 && r.daysUntil <= 7).length;
+    if (monthEl) monthEl.textContent = allReminders.filter(r => r.daysUntil >= 0 && r.daysUntil <= 30).length;
+}
+
+function viewMemberByIdFromReminder(memberId) {
+    const memberIndex = allMembers.findIndex(m => (m['Member ID'] || m['UID']) == memberId);
+    if (memberIndex !== -1) viewProfile(memberIndex);
+}
+
+function sendWhatsAppReminder(mobile, name, type) {
+    const message = `Hi! Just a friendly reminder about ${name}'s ${type} coming up soon! 🎉`;
+    window.open(`https://wa.me/${mobile.replace(/\D/g, '')}?text=${encodeURIComponent(message)}`, '_blank');
+}
+
+function exportReminders() {
+    const filter = document.getElementById('reminderFilter').value;
+    let filteredReminders = [];
+    switch(filter) {
+        case 'today': filteredReminders = allReminders.filter(r => r.daysUntil === 0); break;
+        case 'week': filteredReminders = allReminders.filter(r => r.daysUntil >= 0 && r.daysUntil <= 7); break;
+        case 'month': filteredReminders = allReminders.filter(r => r.daysUntil >= 0 && r.daysUntil <= 30); break;
+        case 'upcoming30': filteredReminders = allReminders.filter(r => r.daysUntil >= 0 && r.daysUntil <= 30); break;
+        case 'all': filteredReminders = allReminders.filter(r => r.daysUntil >= 0 && r.daysUntil <= 365); break;
+    }
+
+    const data = filteredReminders.map(r => ({
+        'Date': r.date.toLocaleDateString(),
+        'Days Until': r.daysUntil,
+        'Type': r.type,
+        'Member Name': r.name,
+        'Member ID': r.memberId,
+        'Details': r.details,
+        'Mobile': r.mobile
+    }));
+
+    const ws = XLSX.utils.json_to_sheet(data);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Reminders");
+    XLSX.writeFile(wb, `JPOS_Reminders_${filter}_${new Date().toISOString().split('T')[0]}.xlsx`);
+}
+
+function copyReminderNumbers() {
+    const filter = document.getElementById('reminderFilter').value;
+    let filteredReminders = [];
+    switch(filter) {
+        case 'today': filteredReminders = allReminders.filter(r => r.daysUntil === 0); break;
+        case 'week': filteredReminders = allReminders.filter(r => r.daysUntil >= 0 && r.daysUntil <= 7); break;
+        case 'month': filteredReminders = allReminders.filter(r => r.daysUntil >= 0 && r.daysUntil <= 30); break;
+        case 'upcoming30': filteredReminders = allReminders.filter(r => r.daysUntil >= 0 && r.daysUntil <= 30); break;
+        case 'all': filteredReminders = allReminders.filter(r => r.daysUntil >= 0 && r.daysUntil <= 365); break;
+    }
+
+    const numbers = filteredReminders
+        .map(r => r.mobile)
+        .filter(Boolean)
+        .filter((v, i, a) => a.indexOf(v) === i)
+        .join('\n');
+
+    navigator.clipboard.writeText(numbers).then(() => {
+        alert(`Copied ${numbers.split('\n').length} unique WhatsApp numbers!`);
+    });
+}
+
+
+// ============================================================
+// WHATSAPP INDIVIDUAL REMINDERS
+// ============================================================
+
+let pendingMembers = [];
+let remindedMembers = [];
+let currentPendingFilter = 'all';
+
+let messageTemplate = `⚡ *JPOS Youth Wing - Urgent Update*
+
+Dear {NAME},
+
+📊 *Registration Status:*
+✅ 130+ members completed
+⏳ Only 20-25 remaining
+
+*Everyone else has finished - where are you?*
+
+🔗 Complete NOW:
+https://youthwingjpos.github.io/yjpos/
+
+🆔 *Your Member ID:* {MEMBER_ID}
+
+Upload:
+📸 Photo (mandatory)
+🆔 Aadhar (mandatory)
+
+⏱️ Takes only 10 minutes
+
+*Don't be the last one!*
+
+*Complete it TODAY!* ⚡
+
+- JPOS Youth Wing Management`;
+
+function loadPendingMembers() {
+    console.log('Loading pending members...');
+    
+    if (!document.getElementById('pendingMembersList')) {
+        console.log('Pending members container not found');
+        return;
+    }
+    
+    pendingMembers = allMembers.filter(m => 
+        (m['Profile Completed'] || '').toLowerCase() !== 'yes'
+    );
+
+    const reminded = localStorage.getItem('jpos_reminded_members');
+    if (reminded) {
+        remindedMembers = JSON.parse(reminded);
+    }
+
+    document.getElementById('pendingCount').textContent = pendingMembers.length;
+    updateRemindedCount();
+    updateMessagePreview();
+    renderPendingMembersList();
+    console.log('Pending members loaded:', pendingMembers.length);
+}
+
+function updateRemindedCount() {
+    const el = document.getElementById('remindedCount');
+    if (el) el.textContent = remindedMembers.length;
+}
+
+function updateMessagePreview() {
+    const el = document.getElementById('messagePreview');
+    if (el) {
+        const preview = messageTemplate
+            .replace('{NAME}', 'Member Name')
+            .replace('{MEMBER_ID}', 'XXXX');
+        el.textContent = preview;
+    }
+}
+
+function renderPendingMembersList() {
+    const container = document.getElementById('pendingMembersList');
+    const noMembersDiv = document.getElementById('noPendingMembers');
+    
+    if (!container) return;
+
+    let filteredPending = [];
+    
+    if (currentPendingFilter === 'all') {
+        filteredPending = pendingMembers;
+    } else if (currentPendingFilter === 'notReminded') {
+        filteredPending = pendingMembers.filter(m => 
+            !remindedMembers.includes(m['Member ID'] || m['UID'])
+        );
+    } else if (currentPendingFilter === 'reminded') {
+        filteredPending = pendingMembers.filter(m => 
+            remindedMembers.includes(m['Member ID'] || m['UID'])
+        );
+    }
+
+    if (filteredPending.length === 0) {
+        container.innerHTML = '';
+        if (noMembersDiv) noMembersDiv.style.display = 'block';
+        return;
+    }
+
+    if (noMembersDiv) noMembersDiv.style.display = 'none';
+
+    container.innerHTML = filteredPending.map(member => {
+        const memberId = member['Member ID'] || member['UID'];
+        const memberName = member.Name || member.name || 'Unknown';
+        const area = member.Area || member.area || 'Unknown';
+        const mobile = member.Mobile || member.mobile || 'No mobile';
+        const whatsapp = member['WhatsApp Number'] || mobile;
+        const isReminded = remindedMembers.includes(memberId);
+
+        return `
+            <div class="pending-member-card ${isReminded ? 'reminded' : ''}">
+                <div class="pending-member-info">
+                    <div class="pending-member-name">
+                        ${memberName}
+                        ${isReminded ? '<span class="reminded-badge">✓ Reminded</span>' : ''}
+                    </div>
+                    <div class="pending-member-details">
+                        🆔 ${memberId} | 📍 ${area} | 📱 ${whatsapp}
+                    </div>
+                </div>
+                <div class="pending-member-actions">
+                    <button class="whatsapp-btn" onclick="sendWhatsAppReminder('${memberId}', '${memberName}', '${whatsapp}')">
+                        📱 WhatsApp
+                    </button>
+                    ${!isReminded ? `<button class="mark-sent-btn" onclick="markAsReminded('${memberId}')">✓ Mark</button>` : ''}
+                </div>
+            </div>
+        `;
+    }).join('');
+}
+
+function sendWhatsAppReminder(memberId, memberName, mobile) {
+    const personalizedMessage = messageTemplate
+        .replace('{NAME}', memberName)
+        .replace('{MEMBER_ID}', memberId);
+
+    const cleanNumber = mobile.replace(/\D/g, '');
+    const whatsappUrl = `https://wa.me/${cleanNumber}?text=${encodeURIComponent(personalizedMessage)}`;
+    window.open(whatsappUrl, '_blank');
+
+    setTimeout(() => {
+        if (confirm(`Mark ${memberName} as reminded?`)) {
+            markAsReminded(memberId);
+        }
+    }, 2000);
+}
+
+function markAsReminded(memberId) {
+    if (!remindedMembers.includes(memberId)) {
+        remindedMembers.push(memberId);
+        localStorage.setItem('jpos_reminded_members', JSON.stringify(remindedMembers));
+        updateRemindedCount();
+        renderPendingMembersList();
+    }
+}
+
+function sendToAllPending() {
+    const notReminded = pendingMembers.filter(m => 
+        !remindedMembers.includes(m['Member ID'] || m['UID'])
+    );
+
+    if (notReminded.length === 0) {
+        alert('All pending members reminded!');
+        return;
+    }
+
+    if (!confirm(`Open WhatsApp for ${notReminded.length} members?`)) {
+        return;
+    }
+
+    let index = 0;
+    const interval = setInterval(() => {
+        if (index >= notReminded.length) {
+            clearInterval(interval);
+            alert('All opened!');
+            return;
+        }
+
+        const member = notReminded[index];
+        const memberId = member['Member ID'] || member['UID'];
+        const memberName = member.Name || member.name || 'Member';
+        const mobile = member['WhatsApp Number'] || member.Mobile || member.mobile;
+
+        if (mobile) {
+            sendWhatsAppReminder(memberId, memberName, mobile);
+        }
+
+        index++;
+    }, 3000);
+}
+
+function exportPendingNumbers() {
+    const data = pendingMembers.map(m => ({
+        'Member ID': m['Member ID'] || m['UID'],
+        'Name': m.Name || m.name,
+        'Area': m.Area || m.area,
+        'Mobile': m.Mobile || m.mobile,
+        'WhatsApp': m['WhatsApp Number'] || m.Mobile || m.mobile,
+        'Reminded': remindedMembers.includes(m['Member ID'] || m['UID']) ? 'Yes' : 'No'
+    }));
+
+    const ws = XLSX.utils.json_to_sheet(data);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Pending");
+    XLSX.writeFile(wb, `Pending_${new Date().toISOString().split('T')[0]}.xlsx`);
+}
+
+function copyPendingNumbers() {
+    const numbers = pendingMembers
+        .map(m => m['WhatsApp Number'] || m.Mobile || m.mobile)
+        .filter(Boolean)
+        .filter((v, i, a) => a.indexOf(v) === i)
+        .join('\n');
+
+    navigator.clipboard.writeText(numbers).then(() => {
+        alert(`Copied ${numbers.split('\n').length} numbers!`);
+    });
+}
+
+function filterPendingList(filter) {
+    currentPendingFilter = filter;
+    
+    document.getElementById('filterAll').className = 'btn btn-secondary btn-sm';
+    document.getElementById('filterNotReminded').className = 'btn btn-secondary btn-sm';
+    document.getElementById('filterReminded').className = 'btn btn-secondary btn-sm';
+    
+    if (filter === 'all') {
+        document.getElementById('filterAll').className = 'btn btn-primary btn-sm';
+    } else if (filter === 'notReminded') {
+        document.getElementById('filterNotReminded').className = 'btn btn-primary btn-sm';
+    } else if (filter === 'reminded') {
+        document.getElementById('filterReminded').className = 'btn btn-primary btn-sm';
+    }
+    
+    renderPendingMembersList();
+}
+
+function editMessageTemplate() {
+    const newTemplate = prompt('Edit message (use {NAME} and {MEMBER_ID}):', messageTemplate);
+    
+    if (newTemplate !== null && newTemplate.trim() !== '') {
+        messageTemplate = newTemplate;
+        localStorage.setItem('jpos_message_template', messageTemplate);
+        updateMessagePreview();
+        alert('Template updated!');
+    }
+}
+
+const savedTemplate = localStorage.getItem('jpos_message_template');
+if (savedTemplate) {
+    messageTemplate = savedTemplate;
+}
+
+console.log('All enhanced functions loaded!');
+
+
+========== END OF CODE TO ADD ==========
+
+
+NOW UPDATE THE FUNCTION CALLS:
+================================
+
+1. FIND: renderCharts() function
+   ADD these two lines at the end:
+   
+   renderAgeChart();
+   renderNativePlaceChart();
+
+2. FIND: loadMemberData() function
+   AFTER the line: renderCharts();
+   ADD these lines:
+   
+   updateEnhancedStats();
+   renderAreaBreakdown();
+   generateReminders();
+   loadPendingMembers();
+
+
+DONE! ALL FEATURES WILL WORK! ✅
+
+
+</script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js">
+
+// ============================================================
+// CALCULATE AGE FUNCTION (REQUIRED FOR MULTIPLE FEATURES)
+// ============================================================
+
+function calculateAge(dob) {
+    if (!dob) return null;
+    const birthDate = new Date(dob);
+    const today = new Date();
+    let age = today.getFullYear() - birthDate.getFullYear();
+    const monthDiff = today.getMonth() - birthDate.getMonth();
+    if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
+        age--;
+    }
+    return age;
+}
+
+function calculateAgeFromDate(birthDate) {
+    const today = new Date();
+    let age = today.getFullYear() - birthDate.getFullYear();
+    const monthDiff = today.getMonth() - birthDate.getMonth();
+    if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
+        age--;
+    }
+    return age;
+}
+
+
+// ============================================================
+// ENHANCED QUICK STATS
+// ============================================================
+
+function updateEnhancedStats() {
+    console.log('Updating enhanced stats...');
+    
+    // Check if elements exist
+    if (!document.getElementById('avgAge')) {
+        console.log('Enhanced stats elements not found');
+        return;
+    }
+    
+    // Average Age
+    const ages = allMembers
+        .map(m => calculateAge(m['Date of Birth'] || m['DOB']))
+        .filter(age => age !== null && !isNaN(age));
+    
+    const avgAge = ages.length > 0 
+        ? Math.round(ages.reduce((a, b) => a + b, 0) / ages.length) 
+        : 0;
+    
+    document.getElementById('avgAge').textContent = avgAge > 0 ? avgAge + ' years' : 'N/A';
+
+    // Business Count
+    const businessCount = allMembers.filter(m => 
+        (m['Employment Type'] || '').toLowerCase().includes('business')
+    ).length;
+    
+    document.getElementById('businessCount').textContent = businessCount;
+
+    // Married Count
+    const marriedCount = allMembers.filter(m => 
+        (m['Marital Status'] || '').toLowerCase() === 'married'
+    ).length;
+    
+    document.getElementById('marriedCount').textContent = marriedCount;
+
+    // Top Area
+    const areaCounts = {};
+    allMembers.forEach(m => {
+        const area = m.Area || m.area || 'Unknown';
+        areaCounts[area] = (areaCounts[area] || 0) + 1;
+    });
+    
+    const topArea = Object.entries(areaCounts)
+        .sort((a, b) => b[1] - a[1])[0];
+    
+    document.getElementById('topArea').textContent = topArea 
+        ? `${topArea[0]} (${topArea[1]})` 
+        : 'N/A';
+    
+    console.log('Enhanced stats updated');
+}
+
+
+// ============================================================
+// AREA BREAKDOWN
+// ============================================================
+
+function renderAreaBreakdown() {
+    console.log('Rendering area breakdown...');
+    
+    const container = document.getElementById('areaBreakdown');
+    if (!container) {
+        console.log('Area breakdown container not found');
+        return;
+    }
+    
+    const areaGroups = {};
+    
+    allMembers.forEach(member => {
+        const area = member.Area || member.area || 'Unknown';
+        if (!areaGroups[area]) {
+            areaGroups[area] = [];
+        }
+        areaGroups[area].push(member);
+    });
+
+    const sortedAreas = Object.entries(areaGroups).sort((a, b) => b[1].length - a[1].length);
+    container.innerHTML = '';
+
+    sortedAreas.forEach(([area, members], index) => {
+        const section = document.createElement('div');
+        section.className = 'area-section';
+        section.innerHTML = `
+            <div class="area-header" onclick="toggleArea(${index})">
+                <div class="area-title">📍 ${area}</div>
+                <div class="area-count">${members.length} members</div>
+            </div>
+            <div class="area-members" id="area-${index}">
+                ${members.map(m => {
+                    const memberIndex = allMembers.findIndex(am => 
+                        (am['Member ID'] || am['UID']) === (m['Member ID'] || m['UID'])
+                    );
+                    return `
+                        <div class="member-card">
+                            <div class="member-basic">
+                                <strong>${m.Name || m.name || 'N/A'}</strong>
+                                <small>ID: ${m['Member ID'] || m['UID'] || 'N/A'} | 
+                                      Mobile: ${m.Mobile || m.mobile || 'N/A'} | 
+                                      ${(m['Profile Completed'] || '').toLowerCase() === 'yes' ? '✓ Complete' : '⏳ Pending'}
+                                </small>
+                            </div>
+                            <button class="view-btn" onclick="viewProfile(${memberIndex})">View</button>
+                        </div>
+                    `;
+                }).join('')}
+            </div>
+        `;
+        container.appendChild(section);
+    });
+    
+    console.log('Area breakdown rendered');
+}
+
+function toggleArea(index) {
+    const members = document.getElementById(`area-${index}`);
+    const header = members.previousElementSibling;
+    members.classList.toggle('show');
+    header.classList.toggle('active');
+}
+
+function toggleAllAreas() {
+    const allAreas = document.querySelectorAll('.area-members');
+    const allHeaders = document.querySelectorAll('.area-header');
+    const btn = document.getElementById('toggleAreasBtn');
+    
+    const anyExpanded = Array.from(allAreas).some(a => a.classList.contains('show'));
+    
+    if (anyExpanded) {
+        allAreas.forEach(a => a.classList.remove('show'));
+        allHeaders.forEach(h => h.classList.remove('active'));
+        btn.textContent = 'Expand All';
+    } else {
+        allAreas.forEach(a => a.classList.add('show'));
+        allHeaders.forEach(h => h.classList.add('active'));
+        btn.textContent = 'Collapse All';
+    }
+}
+
+
+// ============================================================
+// AGE DISTRIBUTION CHART
+// ============================================================
+
+function renderAgeChart() {
+    console.log('Rendering age chart...');
+    
+    const canvas = document.getElementById('ageChart');
+    if (!canvas) {
+        console.log('Age chart canvas not found');
+        return;
+    }
+    
+    const ageGroups = {
+        'Under 18': 0, '18-25': 0, '26-35': 0,
+        '36-45': 0, '46-55': 0, '56+': 0, 'Not Specified': 0
+    };
+
+    allMembers.forEach(m => {
+        const dob = m['Date of Birth'] || m['DOB'];
+        if (!dob) {
+            ageGroups['Not Specified']++;
+            return;
+        }
+        const age = calculateAge(dob);
+        if (age === null || isNaN(age)) {
+            ageGroups['Not Specified']++;
+        } else if (age < 18) ageGroups['Under 18']++;
+        else if (age <= 25) ageGroups['18-25']++;
+        else if (age <= 35) ageGroups['26-35']++;
+        else if (age <= 45) ageGroups['36-45']++;
+        else if (age <= 55) ageGroups['46-55']++;
+        else ageGroups['56+']++;
+    });
+
+    new Chart(canvas, {
+        type: 'bar',
+        data: {
+            labels: Object.keys(ageGroups),
+            datasets: [{
+                label: 'Members',
+                data: Object.values(ageGroups),
+                backgroundColor: ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#94a3b8']
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: { legend: { display: false } },
+            scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } } }
+        }
+    });
+    
+    console.log('Age chart rendered');
+}
+
+function filterByAge(range) {
+    if (range === 'all') {
+        filteredMembers = [...allMembers];
+    } else {
+        filteredMembers = allMembers.filter(m => {
+            const dob = m['Date of Birth'] || m['DOB'];
+            if (!dob) return false;
+            const age = calculateAge(dob);
+            if (age === null || isNaN(age)) return false;
+            
+            switch(range) {
+                case '18-25': return age >= 18 && age <= 25;
+                case '26-35': return age >= 26 && age <= 35;
+                case '36-45': return age >= 36 && age <= 45;
+                case '46+': return age >= 46;
+                default: return true;
+            }
+        });
+    }
+    
+    currentPage = 1;
+    renderTable();
+    
+    event.target.parentElement.querySelectorAll('.btn-sm').forEach(btn => {
+        btn.classList.remove('btn-primary');
+        btn.classList.add('btn-secondary');
+    });
+    event.target.classList.remove('btn-secondary');
+    event.target.classList.add('btn-primary');
+}
+
+
+// ============================================================
+// NATIVE PLACE CHART
+// ============================================================
+
+let nativePlaceChartInstance = null;
+
+function renderNativePlaceChart() {
+    console.log('Rendering native place chart...');
+    
+    const canvas = document.getElementById('nativePlaceChart');
+    if (!canvas) {
+        console.log('Native place chart canvas not found');
+        return;
+    }
+    
+    const nativeCounts = {};
+    allMembers.forEach(m => {
+        const native = m['Native Place'] || m['Native'] || m['native'] || 'Not Specified';
+        nativeCounts[native] = (nativeCounts[native] || 0) + 1;
+    });
+
+    const sortedNatives = Object.entries(nativeCounts).sort((a, b) => b[1] - a[1]).slice(0, 10);
+    
+    if (nativePlaceChartInstance) nativePlaceChartInstance.destroy();
+
+    nativePlaceChartInstance = new Chart(canvas, {
+        type: 'bar',
+        data: {
+            labels: sortedNatives.map(n => n[0]),
+            datasets: [{ label: 'Members', data: sortedNatives.map(n => n[1]), backgroundColor: '#10b981' }]
+        },
+        options: {
+            indexAxis: 'y',
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: { legend: { display: false } },
+            onClick: (event, elements) => {
+                if (elements.length > 0) {
+                    const index = elements[0].index;
+                    filterByNativePlace(sortedNatives[index][0]);
+                }
+            }
+        }
+    });
+
+    updateNativePlaceList(nativeCounts);
+    console.log('Native place chart rendered');
+}
+
+function updateNativePlaceList(nativeCounts) {
+    const container = document.getElementById('nativePlaceList');
+    if (!container) return;
+    
+    const sortedAll = Object.entries(nativeCounts).sort((a, b) => b[1] - a[1]);
+    
+    container.innerHTML = `
+        <div style="margin-top: 10px;">
+            <strong style="color: #374151;">All Native Places (click to filter):</strong>
+            ${sortedAll.map(([place, count]) => `
+                <div style="display: flex; justify-content: space-between; padding: 8px 5px; cursor: pointer; border-bottom: 1px solid #f3f4f6;"
+                     onclick="filterByNativePlace('${place.replace(/'/g, "\\'")}')"
+                     onmouseover="this.style.background='#f3f4f6'"
+                     onmouseout="this.style.background='white'">
+                    <span style="color: #374151;">${place}</span>
+                    <strong style="color: #3b82f6;">${count}</strong>
+                </div>
+            `).join('')}
+        </div>
+    `;
+}
+
+function filterByNativePlace(place) {
+    filteredMembers = allMembers.filter(m => {
+        const native = m['Native Place'] || m['Native'] || m['native'];
+        return native === place;
+    });
+    currentPage = 1;
+    renderTable();
+    alert(`Filtered by Native Place: ${place}\nShowing ${filteredMembers.length} members`);
+}
+
+
+// ============================================================
+// BIRTHDAY & ANNIVERSARY REMINDERS
+// ============================================================
+
+let allReminders = [];
+
+function generateReminders() {
+    console.log('Generating reminders...');
+    
+    if (!document.getElementById('remindersList')) {
+        console.log('Reminders container not found');
+        return;
+    }
+    
+    allReminders = [];
+    const today = new Date();
+
+    allMembers.forEach(member => {
+        const memberId = member['Member ID'] || member['UID'];
+        const memberName = member.Name || member.name || 'Unknown';
+        const mobile = member.Mobile || member.mobile || '';
+
+        // Member Birthday
+        const dob = member['Date of Birth'] || member['DOB'];
+        if (dob) {
+            const birthday = parseDate(dob);
+            if (birthday) {
+                const nextBirthday = getNextOccurrence(birthday, today);
+                const age = calculateAge(dob);
+                allReminders.push({
+                    memberId, name: memberName, type: 'Birthday',
+                    date: nextBirthday, daysUntil: getDaysUntil(nextBirthday, today),
+                    details: `${memberName}'s Birthday${age ? ` (Turning ${age + 1})` : ''}`,
+                    mobile, actualDate: birthday
+                });
+            }
+        }
+
+        // Marriage Anniversary
+        const marriageDate = member['Date of Marriage'];
+        const maritalStatus = (member['Marital Status'] || '').toLowerCase();
+        if (marriageDate && maritalStatus === 'married') {
+            const anniversary = parseDate(marriageDate);
+            if (anniversary) {
+                const nextAnniversary = getNextOccurrence(anniversary, today);
+                const years = today.getFullYear() - anniversary.getFullYear();
+                allReminders.push({
+                    memberId, name: memberName, type: 'Anniversary',
+                    date: nextAnniversary, daysUntil: getDaysUntil(nextAnniversary, today),
+                    details: `${memberName}'s ${years > 0 ? years + ' Year ' : ''}Wedding Anniversary`,
+                    mobile, actualDate: anniversary
+                });
+            }
+        }
+
+        // Spouse Birthday
+        const spouseDOB = member['Spouse DOB'];
+        const spouseName = member['Spouse Name'];
+        if (spouseDOB && spouseName && maritalStatus === 'married') {
+            const spouseBirthday = parseDate(spouseDOB);
+            if (spouseBirthday) {
+                const nextSpouseBday = getNextOccurrence(spouseBirthday, today);
+                allReminders.push({
+                    memberId, name: memberName, type: 'Spouse Birthday',
+                    date: nextSpouseBday, daysUntil: getDaysUntil(nextSpouseBday, today),
+                    details: `${spouseName}'s Birthday (Spouse of ${memberName})`,
+                    mobile, actualDate: spouseBirthday
+                });
+            }
+        }
+
+        // Children Birthdays
+        for (let i = 1; i <= 3; i++) {
+            const childName = member[`Child ${i} Name`];
+            const childDOB = member[`Child ${i} DOB`];
+            if (childName && childDOB) {
+                const childBirthday = parseDate(childDOB);
+                if (childBirthday) {
+                    const nextChildBday = getNextOccurrence(childBirthday, today);
+                    const childAge = calculateAgeFromDate(childBirthday);
+                    allReminders.push({
+                        memberId, name: memberName, type: 'Child Birthday',
+                        date: nextChildBday, daysUntil: getDaysUntil(nextChildBday, today),
+                        details: `${childName}'s Birthday (Child of ${memberName})${childAge !== null ? ` - Turning ${childAge + 1}` : ''}`,
+                        mobile, actualDate: childBirthday
+                    });
+                }
+            }
+        }
+    });
+
+    allReminders.sort((a, b) => a.daysUntil - b.daysUntil);
+    updateReminders();
+    updateReminderStats();
+    console.log('Reminders generated:', allReminders.length);
+}
+
+function parseDate(dateStr) {
+    if (!dateStr) return null;
+    let date = new Date(dateStr);
+    if (isNaN(date.getTime())) {
+        const parts = dateStr.split(/[-/]/);
+        if (parts.length === 3) date = new Date(parts[2], parts[1] - 1, parts[0]);
+    }
+    return isNaN(date.getTime()) ? null : date;
+}
+
+function getNextOccurrence(date, today) {
+    const nextDate = new Date(today.getFullYear(), date.getMonth(), date.getDate());
+    if (nextDate < today) nextDate.setFullYear(today.getFullYear() + 1);
+    return nextDate;
+}
+
+function getDaysUntil(futureDate, today) {
+    const oneDay = 24 * 60 * 60 * 1000;
+    const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+    const futureDateStart = new Date(futureDate.getFullYear(), futureDate.getMonth(), futureDate.getDate());
+    return Math.round((futureDateStart - todayStart) / oneDay);
+}
+
+function updateReminders() {
+    const filter = document.getElementById('reminderFilter');
+    if (!filter) return;
+    
+    const container = document.getElementById('remindersList');
+    const noRemindersDiv = document.getElementById('noReminders');
+    
+    let filteredReminders = [];
+    const filterValue = filter.value;
+    
+    switch(filterValue) {
+        case 'today': filteredReminders = allReminders.filter(r => r.daysUntil === 0); break;
+        case 'week': filteredReminders = allReminders.filter(r => r.daysUntil >= 0 && r.daysUntil <= 7); break;
+        case 'month': filteredReminders = allReminders.filter(r => r.daysUntil >= 0 && r.daysUntil <= 30); break;
+        case 'upcoming30': filteredReminders = allReminders.filter(r => r.daysUntil >= 0 && r.daysUntil <= 30); break;
+        case 'all': filteredReminders = allReminders.filter(r => r.daysUntil >= 0 && r.daysUntil <= 365); break;
+    }
+
+    if (filteredReminders.length === 0) {
+        container.innerHTML = '';
+        noRemindersDiv.style.display = 'block';
+        return;
+    }
+
+    noRemindersDiv.style.display = 'none';
+    container.innerHTML = filteredReminders.map(reminder => {
+        const cardClass = reminder.daysUntil === 0 ? 'today' : reminder.daysUntil <= 7 ? 'thisweek' : '';
+        const badgeClass = reminder.type === 'Birthday' ? 'badge-birthday' :
+                          reminder.type === 'Anniversary' ? 'badge-anniversary' :
+                          reminder.type === 'Spouse Birthday' ? 'badge-spouse' : 'badge-child';
+        const dateStr = reminder.date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+        const urgencyText = reminder.daysUntil === 0 ? '🎉 TODAY!' :
+                           reminder.daysUntil === 1 ? '⏰ TOMORROW' : `In ${reminder.daysUntil} days`;
+
+        return `
+            <div class="reminder-card ${cardClass}">
+                <div class="reminder-info">
+                    <div class="reminder-name">
+                        ${reminder.details}
+                        <span class="reminder-badge ${badgeClass}">${reminder.type}</span>
+                    </div>
+                    <div class="reminder-details">
+                        📅 ${dateStr} • ${urgencyText} • ID: ${reminder.memberId} • 📱 ${reminder.mobile || 'No mobile'}
+                    </div>
+                </div>
+                <div class="reminder-date">
+                    <div class="reminder-day">${reminder.date.getDate()}</div>
+                    <div class="reminder-month">${reminder.date.toLocaleDateString('en-US', { month: 'short' })}</div>
+                </div>
+                <div class="reminder-actions">
+                    <button class="view-btn" onclick="viewMemberByIdFromReminder('${reminder.memberId}')">View</button>
+                    ${reminder.mobile ? `<button class="btn btn-success btn-sm" onclick="sendWhatsAppReminder('${reminder.mobile}', '${reminder.name}', '${reminder.type}')">WhatsApp</button>` : ''}
+                </div>
+            </div>
+        `;
+    }).join('');
+}
+
+function updateReminderStats() {
+    const todayEl = document.getElementById('todayCount');
+    const weekEl = document.getElementById('weekCount');
+    const monthEl = document.getElementById('monthCount');
+    
+    if (todayEl) todayEl.textContent = allReminders.filter(r => r.daysUntil === 0).length;
+    if (weekEl) weekEl.textContent = allReminders.filter(r => r.daysUntil >= 0 && r.daysUntil <= 7).length;
+    if (monthEl) monthEl.textContent = allReminders.filter(r => r.daysUntil >= 0 && r.daysUntil <= 30).length;
+}
+
+function viewMemberByIdFromReminder(memberId) {
+    const memberIndex = allMembers.findIndex(m => (m['Member ID'] || m['UID']) == memberId);
+    if (memberIndex !== -1) viewProfile(memberIndex);
+}
+
+function sendWhatsAppReminder(mobile, name, type) {
+    const message = `Hi! Just a friendly reminder about ${name}'s ${type} coming up soon! 🎉`;
+    window.open(`https://wa.me/${mobile.replace(/\D/g, '')}?text=${encodeURIComponent(message)}`, '_blank');
+}
+
+function exportReminders() {
+    const filter = document.getElementById('reminderFilter').value;
+    let filteredReminders = [];
+    switch(filter) {
+        case 'today': filteredReminders = allReminders.filter(r => r.daysUntil === 0); break;
+        case 'week': filteredReminders = allReminders.filter(r => r.daysUntil >= 0 && r.daysUntil <= 7); break;
+        case 'month': filteredReminders = allReminders.filter(r => r.daysUntil >= 0 && r.daysUntil <= 30); break;
+        case 'upcoming30': filteredReminders = allReminders.filter(r => r.daysUntil >= 0 && r.daysUntil <= 30); break;
+        case 'all': filteredReminders = allReminders.filter(r => r.daysUntil >= 0 && r.daysUntil <= 365); break;
+    }
+
+    const data = filteredReminders.map(r => ({
+        'Date': r.date.toLocaleDateString(),
+        'Days Until': r.daysUntil,
+        'Type': r.type,
+        'Member Name': r.name,
+        'Member ID': r.memberId,
+        'Details': r.details,
+        'Mobile': r.mobile
+    }));
+
+    const ws = XLSX.utils.json_to_sheet(data);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Reminders");
+    XLSX.writeFile(wb, `JPOS_Reminders_${filter}_${new Date().toISOString().split('T')[0]}.xlsx`);
+}
+
+function copyReminderNumbers() {
+    const filter = document.getElementById('reminderFilter').value;
+    let filteredReminders = [];
+    switch(filter) {
+        case 'today': filteredReminders = allReminders.filter(r => r.daysUntil === 0); break;
+        case 'week': filteredReminders = allReminders.filter(r => r.daysUntil >= 0 && r.daysUntil <= 7); break;
+        case 'month': filteredReminders = allReminders.filter(r => r.daysUntil >= 0 && r.daysUntil <= 30); break;
+        case 'upcoming30': filteredReminders = allReminders.filter(r => r.daysUntil >= 0 && r.daysUntil <= 30); break;
+        case 'all': filteredReminders = allReminders.filter(r => r.daysUntil >= 0 && r.daysUntil <= 365); break;
+    }
+
+    const numbers = filteredReminders
+        .map(r => r.mobile)
+        .filter(Boolean)
+        .filter((v, i, a) => a.indexOf(v) === i)
+        .join('\n');
+
+    navigator.clipboard.writeText(numbers).then(() => {
+        alert(`Copied ${numbers.split('\n').length} unique WhatsApp numbers!`);
+    });
+}
+
+
+// ============================================================
+// WHATSAPP INDIVIDUAL REMINDERS
+// ============================================================
+
+let pendingMembers = [];
+let remindedMembers = [];
+let currentPendingFilter = 'all';
+
+let messageTemplate = `⚡ *JPOS Youth Wing - Urgent Update*
+
+Dear {NAME},
+
+📊 *Registration Status:*
+✅ 130+ members completed
+⏳ Only 20-25 remaining
+
+*Everyone else has finished - where are you?*
+
+🔗 Complete NOW:
+https://youthwingjpos.github.io/yjpos/
+
+🆔 *Your Member ID:* {MEMBER_ID}
+
+Upload:
+📸 Photo (mandatory)
+🆔 Aadhar (mandatory)
+
+⏱️ Takes only 10 minutes
+
+*Don't be the last one!*
+
+*Complete it TODAY!* ⚡
+
+- JPOS Youth Wing Management`;
+
+function loadPendingMembers() {
+    console.log('Loading pending members...');
+    
+    if (!document.getElementById('pendingMembersList')) {
+        console.log('Pending members container not found');
+        return;
+    }
+    
+    pendingMembers = allMembers.filter(m => 
+        (m['Profile Completed'] || '').toLowerCase() !== 'yes'
+    );
+
+    const reminded = localStorage.getItem('jpos_reminded_members');
+    if (reminded) {
+        remindedMembers = JSON.parse(reminded);
+    }
+
+    document.getElementById('pendingCount').textContent = pendingMembers.length;
+    updateRemindedCount();
+    updateMessagePreview();
+    renderPendingMembersList();
+    console.log('Pending members loaded:', pendingMembers.length);
+}
+
+function updateRemindedCount() {
+    const el = document.getElementById('remindedCount');
+    if (el) el.textContent = remindedMembers.length;
+}
+
+function updateMessagePreview() {
+    const el = document.getElementById('messagePreview');
+    if (el) {
+        const preview = messageTemplate
+            .replace('{NAME}', 'Member Name')
+            .replace('{MEMBER_ID}', 'XXXX');
+        el.textContent = preview;
+    }
+}
+
+function renderPendingMembersList() {
+    const container = document.getElementById('pendingMembersList');
+    const noMembersDiv = document.getElementById('noPendingMembers');
+    
+    if (!container) return;
+
+    let filteredPending = [];
+    
+    if (currentPendingFilter === 'all') {
+        filteredPending = pendingMembers;
+    } else if (currentPendingFilter === 'notReminded') {
+        filteredPending = pendingMembers.filter(m => 
+            !remindedMembers.includes(m['Member ID'] || m['UID'])
+        );
+    } else if (currentPendingFilter === 'reminded') {
+        filteredPending = pendingMembers.filter(m => 
+            remindedMembers.includes(m['Member ID'] || m['UID'])
+        );
+    }
+
+    if (filteredPending.length === 0) {
+        container.innerHTML = '';
+        if (noMembersDiv) noMembersDiv.style.display = 'block';
+        return;
+    }
+
+    if (noMembersDiv) noMembersDiv.style.display = 'none';
+
+    container.innerHTML = filteredPending.map(member => {
+        const memberId = member['Member ID'] || member['UID'];
+        const memberName = member.Name || member.name || 'Unknown';
+        const area = member.Area || member.area || 'Unknown';
+        const mobile = member.Mobile || member.mobile || 'No mobile';
+        const whatsapp = member['WhatsApp Number'] || mobile;
+        const isReminded = remindedMembers.includes(memberId);
+
+        return `
+            <div class="pending-member-card ${isReminded ? 'reminded' : ''}">
+                <div class="pending-member-info">
+                    <div class="pending-member-name">
+                        ${memberName}
+                        ${isReminded ? '<span class="reminded-badge">✓ Reminded</span>' : ''}
+                    </div>
+                    <div class="pending-member-details">
+                        🆔 ${memberId} | 📍 ${area} | 📱 ${whatsapp}
+                    </div>
+                </div>
+                <div class="pending-member-actions">
+                    <button class="whatsapp-btn" onclick="sendWhatsAppReminder('${memberId}', '${memberName}', '${whatsapp}')">
+                        📱 WhatsApp
+                    </button>
+                    ${!isReminded ? `<button class="mark-sent-btn" onclick="markAsReminded('${memberId}')">✓ Mark</button>` : ''}
+                </div>
+            </div>
+        `;
+    }).join('');
+}
+
+function sendWhatsAppReminder(memberId, memberName, mobile) {
+    const personalizedMessage = messageTemplate
+        .replace('{NAME}', memberName)
+        .replace('{MEMBER_ID}', memberId);
+
+    const cleanNumber = mobile.replace(/\D/g, '');
+    const whatsappUrl = `https://wa.me/${cleanNumber}?text=${encodeURIComponent(personalizedMessage)}`;
+    window.open(whatsappUrl, '_blank');
+
+    setTimeout(() => {
+        if (confirm(`Mark ${memberName} as reminded?`)) {
+            markAsReminded(memberId);
+        }
+    }, 2000);
+}
+
+function markAsReminded(memberId) {
+    if (!remindedMembers.includes(memberId)) {
+        remindedMembers.push(memberId);
+        localStorage.setItem('jpos_reminded_members', JSON.stringify(remindedMembers));
+        updateRemindedCount();
+        renderPendingMembersList();
+    }
+}
+
+function sendToAllPending() {
+    const notReminded = pendingMembers.filter(m => 
+        !remindedMembers.includes(m['Member ID'] || m['UID'])
+    );
+
+    if (notReminded.length === 0) {
+        alert('All pending members reminded!');
+        return;
+    }
+
+    if (!confirm(`Open WhatsApp for ${notReminded.length} members?`)) {
+        return;
+    }
+
+    let index = 0;
+    const interval = setInterval(() => {
+        if (index >= notReminded.length) {
+            clearInterval(interval);
+            alert('All opened!');
+            return;
+        }
+
+        const member = notReminded[index];
+        const memberId = member['Member ID'] || member['UID'];
+        const memberName = member.Name || member.name || 'Member';
+        const mobile = member['WhatsApp Number'] || member.Mobile || member.mobile;
+
+        if (mobile) {
+            sendWhatsAppReminder(memberId, memberName, mobile);
+        }
+
+        index++;
+    }, 3000);
+}
+
+function exportPendingNumbers() {
+    const data = pendingMembers.map(m => ({
+        'Member ID': m['Member ID'] || m['UID'],
+        'Name': m.Name || m.name,
+        'Area': m.Area || m.area,
+        'Mobile': m.Mobile || m.mobile,
+        'WhatsApp': m['WhatsApp Number'] || m.Mobile || m.mobile,
+        'Reminded': remindedMembers.includes(m['Member ID'] || m['UID']) ? 'Yes' : 'No'
+    }));
+
+    const ws = XLSX.utils.json_to_sheet(data);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Pending");
+    XLSX.writeFile(wb, `Pending_${new Date().toISOString().split('T')[0]}.xlsx`);
+}
+
+function copyPendingNumbers() {
+    const numbers = pendingMembers
+        .map(m => m['WhatsApp Number'] || m.Mobile || m.mobile)
+        .filter(Boolean)
+        .filter((v, i, a) => a.indexOf(v) === i)
+        .join('\n');
+
+    navigator.clipboard.writeText(numbers).then(() => {
+        alert(`Copied ${numbers.split('\n').length} numbers!`);
+    });
+}
+
+function filterPendingList(filter) {
+    currentPendingFilter = filter;
+    
+    document.getElementById('filterAll').className = 'btn btn-secondary btn-sm';
+    document.getElementById('filterNotReminded').className = 'btn btn-secondary btn-sm';
+    document.getElementById('filterReminded').className = 'btn btn-secondary btn-sm';
+    
+    if (filter === 'all') {
+        document.getElementById('filterAll').className = 'btn btn-primary btn-sm';
+    } else if (filter === 'notReminded') {
+        document.getElementById('filterNotReminded').className = 'btn btn-primary btn-sm';
+    } else if (filter === 'reminded') {
+        document.getElementById('filterReminded').className = 'btn btn-primary btn-sm';
+    }
+    
+    renderPendingMembersList();
+}
+
+function editMessageTemplate() {
+    const newTemplate = prompt('Edit message (use {NAME} and {MEMBER_ID}):', messageTemplate);
+    
+    if (newTemplate !== null && newTemplate.trim() !== '') {
+        messageTemplate = newTemplate;
+        localStorage.setItem('jpos_message_template', messageTemplate);
+        updateMessagePreview();
+        alert('Template updated!');
+    }
+}
+
+const savedTemplate = localStorage.getItem('jpos_message_template');
+if (savedTemplate) {
+    messageTemplate = savedTemplate;
+}
+
+console.log('All enhanced functions loaded!');
+
+
+========== END OF CODE TO ADD ==========
+
+
+NOW UPDATE THE FUNCTION CALLS:
+================================
+
+1. FIND: renderCharts() function
+   ADD these two lines at the end:
+   
+   renderAgeChart();
+   renderNativePlaceChart();
+
+2. FIND: loadMemberData() function
+   AFTER the line: renderCharts();
+   ADD these lines:
+   
+   updateEnhancedStats();
+   renderAreaBreakdown();
+   generateReminders();
+   loadPendingMembers();
+
+
+DONE! ALL FEATURES WILL WORK! ✅
+
+
+</script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            --primary: #2563eb;
+            --primary-dark: #1e40af;
+            --secondary: #10b981;
+            --danger: #ef4444;
+            --warning: #f59e0b;
+            --gray-50: #f9fafb;
+            --gray-100: #f3f4f6;
+            --gray-200: #e5e7eb;
+            --gray-300: #d1d5db;
+            --gray-600: #4b5563;
+            --gray-700: #374151;
+            --gray-800: #1f2937;
+            --gray-900: #111827;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        /* LOGIN SCREEN */
+        .login-container {
+            max-width: 450px;
+            margin: 100px auto;
+            background: white;
+            border-radius: 20px;
+            padding: 50px 40px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            text-align: center;
+        }
+
+        .login-logo {
+            font-size: 3em;
+            margin-bottom: 10px;
+        }
+
+        .login-title {
+            font-size: 1.8em;
+            color: var(--gray-900);
+            margin-bottom: 10px;
+            font-weight: 700;
+        }
+
+        .login-subtitle {
+            color: var(--gray-600);
+            margin-bottom: 40px;
+            font-size: 0.95em;
+        }
+
+        .login-input {
+            width: 100%;
+            padding: 15px 20px;
+            border: 2px solid var(--gray-200);
+            border-radius: 10px;
+            font-size: 1em;
+            margin-bottom: 20px;
+            transition: all 0.3s;
+        }
+
+        .login-input:focus {
+            outline: none;
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+        }
+
+        .login-btn {
+            width: 100%;
+            padding: 15px;
+            background: var(--primary);
+            color: white;
+            border: none;
+            border-radius: 10px;
+            font-size: 1.1em;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .login-btn:hover {
+            background: var(--primary-dark);
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(37, 99, 235, 0.3);
+        }
+
+        .login-error {
+            background: #fee;
+            color: var(--danger);
+            padding: 12px;
+            border-radius: 8px;
+            margin-top: 15px;
+            display: none;
+            font-size: 0.9em;
+        }
+
+        .login-footer {
+            margin-top: 30px;
+            color: var(--gray-600);
+            font-size: 0.85em;
+        }
+
+        /* DASHBOARD */
+        .dashboard {
+            display: none;
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        .dashboard.active {
+            display: block;
+        }
+
+        .dashboard-header {
+            background: white;
+            padding: 20px 30px;
+            border-radius: 15px;
+            margin-bottom: 25px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+
+        .dashboard-title {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+
+        .dashboard-title h1 {
+            font-size: 1.8em;
+            color: var(--gray-900);
+        }
+
+        .dashboard-title small {
+            color: var(--gray-600);
+            font-size: 0.9em;
+        }
+
+        .user-info {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+
+        .user-avatar {
+            width: 45px;
+            height: 45px;
+            background: var(--primary);
+            color: white;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 600;
+            font-size: 1.2em;
+        }
+
+        .logout-btn {
+            padding: 10px 20px;
+            background: var(--danger);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: 600;
+            transition: all 0.3s;
+        }
+
+        .logout-btn:hover {
+            background: #dc2626;
+            transform: translateY(-2px);
+        }
+
+        /* STATS CARDS */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+            margin-bottom: 25px;
+        }
+
+        .stat-card {
+            background: white;
+            padding: 25px;
+            border-radius: 15px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            display: flex;
+            align-items: center;
+            gap: 20px;
+        }
+
+        .stat-icon {
+            width: 60px;
+            height: 60px;
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.8em;
+        }
+
+        .stat-icon.blue { background: #dbeafe; }
+        .stat-icon.green { background: #d1fae5; }
+        .stat-icon.yellow { background: #fef3c7; }
+        .stat-icon.red { background: #fee2e2; }
+
+        .stat-info h3 {
+            font-size: 2em;
+            color: var(--gray-900);
+            margin-bottom: 5px;
+        }
+
+        .stat-info p {
+            color: var(--gray-600);
+            font-size: 0.9em;
+        }
+
+        /* SEARCH & FILTER */
+        .controls-panel {
+            background: white;
+            padding: 25px;
+            border-radius: 15px;
+            margin-bottom: 25px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+
+        .search-row {
+            display: grid;
+            grid-template-columns: 2fr 1fr 1fr 1fr auto;
+            gap: 15px;
+            margin-bottom: 15px;
+        }
+
+        .search-input, .filter-select {
+            padding: 12px 15px;
+            border: 2px solid var(--gray-200);
+            border-radius: 8px;
+            font-size: 0.95em;
+            transition: all 0.3s;
+        }
+
+        .search-input:focus, .filter-select:focus {
+            outline: none;
+            border-color: var(--primary);
+        }
+
+        .btn {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 8px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+            font-size: 0.9em;
+        }
+
+        .btn-primary {
+            background: var(--primary);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: var(--primary-dark);
+            transform: translateY(-2px);
+        }
+
+        .btn-secondary {
+            background: var(--gray-200);
+            color: var(--gray-700);
+        }
+
+        .btn-secondary:hover {
+            background: var(--gray-300);
+        }
+
+        .btn-success {
+            background: var(--secondary);
+            color: white;
+        }
+
+        .btn-success:hover {
+            background: #059669;
+        }
+
+        .action-buttons {
+            display: flex;
+            gap: 10px;
+        }
+
+        /* TABLE */
+        .table-container {
+            background: white;
+            border-radius: 15px;
+            padding: 25px;
+            margin-bottom: 25px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            overflow-x: auto;
+        }
+
+        .table-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+
+        .table-header h2 {
+            font-size: 1.4em;
+            color: var(--gray-900);
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        thead {
+            background: var(--gray-50);
+        }
+
+        th {
+            padding: 15px;
+            text-align: left;
+            font-weight: 600;
+            color: var(--gray-700);
+            cursor: pointer;
+            user-select: none;
+        }
+
+        th:hover {
+            background: var(--gray-100);
+        }
+
+        td {
+            padding: 15px;
+            border-bottom: 1px solid var(--gray-200);
+        }
+
+        tbody tr:hover {
+            background: var(--gray-50);
+        }
+
+        .status-badge {
+            padding: 5px 12px;
+            border-radius: 20px;
+            font-size: 0.85em;
+            font-weight: 600;
+        }
+
+        .status-complete {
+            background: #d1fae5;
+            color: #065f46;
+        }
+
+        .status-pending {
+            background: #fef3c7;
+            color: #92400e;
+        }
+
+        .view-btn {
+            padding: 6px 16px;
+            background: var(--primary);
+            color: white;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.85em;
+            font-weight: 600;
+        }
+
+        .view-btn:hover {
+            background: var(--primary-dark);
+        }
+
+        /* PAGINATION */
+        .pagination {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 10px;
+            margin-top: 20px;
+        }
+
+        .page-btn {
+            padding: 8px 15px;
+            border: 2px solid var(--gray-200);
+            background: white;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: 600;
+        }
+
+        .page-btn.active {
+            background: var(--primary);
+            color: white;
+            border-color: var(--primary);
+        }
+
+        .page-btn:hover:not(.active) {
+            border-color: var(--primary);
+        }
+
+        /* ANALYTICS */
+        .analytics-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+            gap: 25px;
+            margin-bottom: 25px;
+        }
+
+        .chart-card {
+            background: white;
+            padding: 25px;
+            border-radius: 15px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+
+        .chart-card h3 {
+            margin-bottom: 20px;
+            color: var(--gray-900);
+            font-size: 1.2em;
+        }
+
+        .chart-container {
+            position: relative;
+            height: 300px;
+        }
+
+        /* MODAL */
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.5);
+            z-index: 1000;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .modal.active {
+            display: flex;
+        }
+
+        .modal-content {
+            background: white;
+            border-radius: 15px;
+            max-width: 800px;
+            max-height: 90vh;
+            overflow-y: auto;
+            padding: 30px;
+            position: relative;
+        }
+
+        .modal-close {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            background: var(--gray-200);
+            border: none;
+            width: 35px;
+            height: 35px;
+            border-radius: 50%;
+            cursor: pointer;
+            font-size: 1.2em;
+        }
+
+        .modal-header {
+            margin-bottom: 25px;
+        }
+
+        .modal-header h2 {
+            font-size: 1.8em;
+            color: var(--gray-900);
+            margin-bottom: 10px;
+        }
+
+        .profile-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 20px;
+        }
+
+        .profile-field {
+            padding: 15px;
+            background: var(--gray-50);
+            border-radius: 8px;
+        }
+
+        .profile-field label {
+            display: block;
+            color: var(--gray-600);
+            font-size: 0.85em;
+            margin-bottom: 5px;
+        }
+
+        .profile-field strong {
+            color: var(--gray-900);
+            font-size: 1.05em;
+        }
+
+        .profile-photo {
+            width: 150px;
+            height: 150px;
+            border-radius: 10px;
+            object-fit: cover;
+            margin: 20px auto;
+            display: block;
+            border: 3px solid var(--gray-200);
+        }
+
+        @media (max-width: 768px) {
+            .search-row {
+                grid-template-columns: 1fr;
+            }
+            
+            .analytics-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            .profile-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: var(--gray-600);
+        }
+
+        .spinner {
+            border: 4px solid var(--gray-200);
+            border-top: 4px solid var(--primary);
+            border-radius: 50%;
+            width: 50px;
+            height: 50px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 20px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    
+        /* ===== ENHANCED FEATURES CSS ===== */
+        .area-section {
+            margin-bottom: 15px;
+            border: 2px solid var(--gray-200);
+            border-radius: 10px;
+            overflow: hidden;
+        }
+
+        .area-header {
+            background: var(--gray-100);
+            padding: 15px 20px;
+            cursor: pointer;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            user-select: none;
+            transition: all 0.3s;
+        }
+
+        .area-header:hover {
+            background: var(--gray-200);
+        }
+
+        .area-header.active {
+            background: var(--primary);
+            color: white;
+        }
+
+        .area-title {
+            font-weight: 600;
+            font-size: 1.1em;
+        }
+
+        .area-count {
+            background: white;
+            color: var(--gray-900);
+            padding: 5px 15px;
+            border-radius: 20px;
+            font-weight: 600;
+            font-size: 0.9em;
+        }
+
+        .area-header.active .area-count {
+            background: var(--gray-900);
+            color: white;
+        }
+
+        .area-members {
+            display: none;
+            padding: 20px;
+            background: white;
+        }
+
+        .area-members.show {
+            display: block;
+        }
+
+        .member-card {
+            padding: 12px 15px;
+            background: var(--gray-50);
+            border-radius: 8px;
+            margin-bottom: 10px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .member-card:hover {
+            background: var(--gray-100);
+        }
+
+        .member-basic {
+            flex: 1;
+        }
+
+        .member-basic strong {
+            color: var(--gray-900);
+            font-size: 1.05em;
+        }
+
+        .member-basic small {
+            color: var(--gray-600);
+            display: block;
+            margin-top: 3px;
+        }
+
+        .btn-sm {
+            padding: 6px 12px;
+            font-size: 0.85em;
+            margin: 2px;
+        }
+
+        .enhanced-stat-card {
+            padding: 15px;
+            border-radius: 10px;
+        }
+
+        .photo-fallback {
+            display: none;
+            padding: 20px;
+            background: #f3f4f6;
+            border-radius: 10px;
+            text-align: center;
+        }
+
+        /* Birthday Reminders CSS */
+        .reminder-card {
+            background: white;
+            border-left: 5px solid #3b82f6;
+            padding: 15px 20px;
+            margin-bottom: 12px;
+            border-radius: 8px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            transition: all 0.3s;
+        }
+
+        .reminder-card:hover {
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            transform: translateX(5px);
+        }
+
+        .reminder-card.today {
+            border-left-color: #ef4444;
+            background: #fef2f2;
+        }
+
+        .reminder-card.thisweek {
+            border-left-color: #f59e0b;
+            background: #fffbeb;
+        }
+
+        .reminder-info {
+            flex: 1;
+        }
+
+        .reminder-name {
+            font-size: 1.1em;
+            font-weight: 600;
+            color: #111827;
+            margin-bottom: 5px;
+        }
+
+        .reminder-details {
+            color: #6b7280;
+            font-size: 0.9em;
+        }
+
+        .reminder-date {
+            text-align: right;
+            margin-right: 20px;
+        }
+
+        .reminder-day {
+            font-size: 2em;
+            font-weight: 700;
+            color: #3b82f6;
+            line-height: 1;
+        }
+
+        .reminder-card.today .reminder-day {
+            color: #ef4444;
+        }
+
+        .reminder-card.thisweek .reminder-day {
+            color: #f59e0b;
+        }
+
+        .reminder-month {
+            font-size: 0.85em;
+            color: #6b7280;
+            text-transform: uppercase;
+        }
+
+        .reminder-badge {
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 0.85em;
+            font-weight: 600;
+            margin-left: 10px;
+        }
+
+        .badge-birthday {
+            background: #dbeafe;
+            color: #1e40af;
+        }
+
+        .badge-anniversary {
+            background: #fce7f3;
+            color: #9f1239;
+        }
+
+        .badge-spouse {
+            background: #e0e7ff;
+            color: #4338ca;
+        }
+
+        .badge-child {
+            background: #d1fae5;
+            color: #065f46;
+        }
+
+        .reminder-actions {
+            display: flex;
+            gap: 8px;
+        }
+
+
+        /* WhatsApp Reminders CSS */
+        .pending-member-card {
+            background: white;
+            border: 2px solid #e5e7eb;
+            border-radius: 10px;
+            padding: 15px 20px;
+            margin-bottom: 12px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            transition: all 0.3s;
+        }
+
+        .pending-member-card:hover {
+            border-color: #3b82f6;
+            box-shadow: 0 4px 12px rgba(59, 130, 246, 0.2);
+        }
+
+        .pending-member-card.reminded {
+            background: #f0fdf4;
+            border-color: #86efac;
+        }
+
+        .pending-member-info {
+            flex: 1;
+        }
+
+        .pending-member-name {
+            font-size: 1.1em;
+            font-weight: 600;
+            color: #111827;
+            margin-bottom: 5px;
+        }
+
+        .pending-member-details {
+            color: #6b7280;
+            font-size: 0.9em;
+        }
+
+        .pending-member-actions {
+            display: flex;
+            gap: 8px;
+            align-items: center;
+        }
+
+        .reminded-badge {
+            background: #10b981;
+            color: white;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 0.85em;
+            font-weight: 600;
+        }
+
+        .whatsapp-btn {
+            background: #25D366;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            transition: all 0.3s;
+        }
+
+        .whatsapp-btn:hover {
+            background: #20BA5A;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(37, 211, 102, 0.4);
+        }
+
+        .mark-sent-btn {
+            background: #6b7280;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 0.85em;
+        }
+
+        .mark-sent-btn:hover {
+            background: #4b5563;
+        }
+
+    </style>
+</head>
+<body>
+    <!-- LOGIN SCREEN -->
+    <div class="login-container" id="loginScreen">
+        <div class="login-logo">🔐</div>
+        <h1 class="login-title">JPOS Admin Dashboard</h1>
+        <p class="login-subtitle">Youth Wing / Yuva Parishad - Member Management</p>
+        
+        <input type="password" id="passwordInput" class="login-input" placeholder="Enter Admin Password" autocomplete="off">
+        <button onclick="login()" class="login-btn">Login</button>
+        
+        <div class="login-error" id="loginError">Invalid password. Please try again.</div>
+        
+        <div class="login-footer">
+            Authorized Admins Only<br>
+            For access, contact: Kuldeep 7010000267
+        </div>
+    </div>
+
+    <!-- DASHBOARD -->
+    <div class="dashboard" id="dashboardScreen">
+        <!-- Header -->
+        <div class="dashboard-header">
+            <div class="dashboard-title">
+                <div>
+                    <h1>🏛️ JPOS Admin Dashboard</h1>
+                    <small>Youth Wing Member Management</small>
+                </div>
+            </div>
+            <div class="user-info">
+                <div class="user-avatar">A</div>
+                <button onclick="logout()" class="logout-btn">Logout</button>
+            </div>
+        </div>
+
+        <!-- Stats Cards -->
+        <div class="stats-grid">
+            <div class="stat-card">
+                <div class="stat-icon blue">👥</div>
+                <div class="stat-info">
+                    <h3 id="statTotal">0</h3>
+                    <p>Total Members</p>
+                </div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon green">✓</div>
+                <div class="stat-info">
+                    <h3 id="statComplete">0</h3>
+                    <p>Profile Completed</p>
+                </div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon yellow">⏳</div>
+                <div class="stat-info">
+                    <h3 id="statPending">0</h3>
+                    <p>Pending</p>
+                </div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon red">📊</div>
+                <div class="stat-info">
+                    <h3 id="statProgress">0%</h3>
+                    <p>Completion Rate</p>
+                </div>
+            </div>
+        </div>
+
+
+        <!-- Enhanced Quick Stats -->
+        <div style="background: white; padding: 25px; border-radius: 15px; margin-bottom: 25px; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
+            <h3 style="margin-bottom: 20px; color: #111827;">📊 Quick Insights</h3>
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px;">
+                <div class="enhanced-stat-card" style="background: #eff6ff;">
+                    <div style="color: #1e40af; font-size: 0.9em;">Average Age</div>
+                    <div id="avgAge" style="font-size: 1.5em; font-weight: 700; color: #1e3a8a;">--</div>
+                </div>
+                <div class="enhanced-stat-card" style="background: #f0fdf4;">
+                    <div style="color: #15803d; font-size: 0.9em;">Business Owners</div>
+                    <div id="businessCount" style="font-size: 1.5em; font-weight: 700; color: #166534;">--</div>
+                </div>
+                <div class="enhanced-stat-card" style="background: #fef3c7;">
+                    <div style="color: #92400e; font-size: 0.9em;">Married Members</div>
+                    <div id="marriedCount" style="font-size: 1.5em; font-weight: 700; color: #78350f;">--</div>
+                </div>
+                <div class="enhanced-stat-card" style="background: #fce7f3;">
+                    <div style="color: #9f1239; font-size: 0.9em;">Top Area</div>
+                    <div id="topArea" style="font-size: 1.5em; font-weight: 700; color: #881337;">--</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Search & Filter Controls -->
+        <div class="controls-panel">
+            <div class="search-row">
+                <input type="text" id="searchInput" class="search-input" placeholder="🔍 Search by name, ID, mobile, area...">
+                <select id="filterArea" class="filter-select">
+                    <option value="">All Areas</option>
+                </select>
+                <select id="filterStatus" class="filter-select">
+                    <option value="">All Status</option>
+                    <option value="complete">Completed</option>
+                    <option value="pending">Pending</option>
+                </select>
+                <select id="filterEmployment" class="filter-select">
+                    <option value="">All Employment</option>
+                    <option value="Job">Job</option>
+                    <option value="Business">Business</option>
+                    <option value="Self-Employed">Self-Employed</option>
+                </select>
+                <button onclick="clearFilters()" class="btn btn-secondary">Clear</button>
+            </div>
+            <div class="action-buttons">
+                <button onclick="exportToExcel()" class="btn btn-success">📥 Export Excel</button>
+                <button onclick="exportToCSV()" class="btn btn-primary">📄 Export CSV</button>
+                <button onclick="copyWhatsAppNumbers()" class="btn btn-primary">📱 Copy WhatsApp List</button>
+            </div>
+        </div>
+
+        <!-- Members Table -->
+        <div class="table-container">
+            <div class="table-header">
+                <h2>📋 Member Directory</h2>
+                <div id="resultsCount">Showing 0 members</div>
+            </div>
+            
+            <div id="loadingIndicator" class="loading" style="display: none;">
+                <div class="spinner"></div>
+                <p>Loading member data...</p>
+            </div>
+
+            <table id="membersTable">
+                <thead>
+                    <tr>
+                        <th onclick="sortTable('id')">ID ↕</th>
+                        <th onclick="sortTable('name')">Name ↕</th>
+                        <th onclick="sortTable('area')">Area ↕</th>
+                        <th>Mobile</th>
+                        <th>Employment</th>
+                        <th onclick="sortTable('status')">Status ↕</th>
+                        <th>Action</th>
+                    </tr>
+                </thead>
+                <tbody id="tableBody">
+                </tbody>
+            </table>
+
+            <div class="pagination" id="pagination"></div>
+        </div>
+
+        <!-- Analytics Charts -->
+        <div class="analytics-grid">
+            <div class="chart-card">
+                <h3>📍 Members by Area</h3>
+                <div class="chart-container">
+                    <canvas id="areaChart"></canvas>
+                </div>
+            </div>
+            <div class="chart-card">
+                <h3>💼 Employment Distribution</h3>
+                <div class="chart-container">
+                    <canvas id="employmentChart"></canvas>
+                </div>
+            </div>
+            <div class="chart-card">
+                <h3>📊 Profile Completion</h3>
+                <div class="chart-container">
+                    <canvas id="completionChart"></canvas>
+                </div>
+            </div>
+            <div class="chart-card">
+                <h3>👥 Marital Status</h3>
+                <div class="chart-container">
+                    <canvas id="maritalChart"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+
+
+        <!-- Enhanced Analytics Charts -->
+        <div class="analytics-grid" style="margin-top: 25px;">
+            <div class="chart-card">
+                <h3>👶 Age Distribution</h3>
+                <div style="margin-bottom: 15px;">
+                    <button onclick="filterByAge('all')" class="btn btn-primary btn-sm">All</button>
+                    <button onclick="filterByAge('18-25')" class="btn btn-secondary btn-sm">18-25</button>
+                    <button onclick="filterByAge('26-35')" class="btn btn-secondary btn-sm">26-35</button>
+                    <button onclick="filterByAge('36-45')" class="btn btn-secondary btn-sm">36-45</button>
+                    <button onclick="filterByAge('46+')" class="btn btn-secondary btn-sm">46+</button>
+                </div>
+                <div class="chart-container">
+                    <canvas id="ageChart"></canvas>
+                </div>
+            </div>
+
+            <div class="chart-card">
+                <h3>🏠 Native Place Distribution</h3>
+                <div class="chart-container">
+                    <canvas id="nativePlaceChart"></canvas>
+                </div>
+                <div id="nativePlaceList" style="margin-top: 15px; max-height: 200px; overflow-y: auto; border-top: 2px solid #e5e7eb; padding-top: 10px;">
+                    <div style="color: #6b7280; font-size: 0.9em; text-align: center;">Click bars to filter</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Area Breakdown -->
+        <div class="table-container">
+            <div class="table-header">
+                <h2>📍 Members by Area - Full List</h2>
+                <button onclick="toggleAllAreas()" class="btn btn-secondary" id="toggleAreasBtn">Expand All</button>
+            </div>
+            <div id="areaBreakdown"></div>
+        </div>
+
+        <!-- Birthday & Anniversary Reminders -->
+        <div class="table-container">
+            <div class="table-header">
+                <h2>🎂 Birthday & Anniversary Reminders</h2>
+                <div style="display: flex; gap: 10px;">
+                    <select id="reminderFilter" class="filter-select" onchange="updateReminders()">
+                        <option value="today">Today</option>
+                        <option value="week" selected>This Week</option>
+                        <option value="month">This Month</option>
+                        <option value="upcoming30">Next 30 Days</option>
+                        <option value="all">All Upcoming</option>
+                    </select>
+                    <button onclick="exportReminders()" class="btn btn-success">📥 Export List</button>
+                    <button onclick="copyReminderNumbers()" class="btn btn-primary">📱 Copy WhatsApp</button>
+                </div>
+            </div>
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 15px; margin-bottom: 20px;">
+                <div style="padding: 15px; background: #fef3c7; border-radius: 10px;">
+                    <div style="color: #92400e; font-size: 0.9em;">Today</div>
+                    <div id="todayCount" style="font-size: 1.8em; font-weight: 700; color: #78350f;">0</div>
+                </div>
+                <div style="padding: 15px; background: #dbeafe; border-radius: 10px;">
+                    <div style="color: #1e40af; font-size: 0.9em;">This Week</div>
+                    <div id="weekCount" style="font-size: 1.8em; font-weight: 700; color: #1e3a8a;">0</div>
+                </div>
+                <div style="padding: 15px; background: #d1fae5; border-radius: 10px;">
+                    <div style="color: #065f46; font-size: 0.9em;">This Month</div>
+                    <div id="monthCount" style="font-size: 1.8em; font-weight: 700; color: #047857;">0</div>
+                </div>
+            </div>
+            <div id="remindersList"></div>
+            <div id="noReminders" style="display: none; text-align: center; padding: 40px; color: #9ca3af;">
+                <div style="font-size: 3em; margin-bottom: 10px;">🎉</div>
+                <p>No birthdays or anniversaries in selected period</p>
+            </div>
+        </div>
+
+
+    
+        <!-- WhatsApp Individual Reminders -->
+        <div class="table-container">
+            <div class="table-header">
+                <h2>📱 Send Individual WhatsApp Reminders</h2>
+                <div style="display: flex; gap: 10px;">
+                    <button onclick="sendToAllPending()" class="btn btn-primary">📤 Open All (Batch)</button>
+                    <button onclick="exportPendingNumbers()" class="btn btn-success">📥 Export</button>
+                    <button onclick="copyPendingNumbers()" class="btn btn-secondary">📋 Copy</button>
+                </div>
+            </div>
+
+            <div style="background: #fef3c7; padding: 15px; border-radius: 10px; margin-bottom: 20px;">
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <div>
+                        <strong style="color: #92400e; font-size: 1.2em;">Pending: </strong>
+                        <span id="pendingCount" style="color: #78350f; font-size: 1.5em; font-weight: 700;">--</span>
+                    </div>
+                    <div>
+                        <strong style="color: #92400e;">Reminded: </strong>
+                        <span id="remindedCount" style="color: #78350f; font-weight: 700;">0</span>
+                    </div>
+                </div>
+            </div>
+
+            <div style="background: #f3f4f6; padding: 15px; border-radius: 8px; margin-bottom: 20px;">
+                <strong style="color: #374151;">Message Template:</strong>
+                <div id="messagePreview" style="margin-top: 10px; padding: 10px; background: white; border-radius: 5px; font-size: 0.9em; white-space: pre-line; color: #6b7280;">Loading...</div>
+                <button onclick="editMessageTemplate()" class="btn btn-secondary btn-sm" style="margin-top: 10px;">✏️ Edit</button>
+            </div>
+
+            <div style="margin-bottom: 15px;">
+                <label style="margin-right: 10px; font-weight: 600;">Filter:</label>
+                <button onclick="filterPendingList('all')" class="btn btn-primary btn-sm" id="filterAll">All</button>
+                <button onclick="filterPendingList('notReminded')" class="btn btn-secondary btn-sm" id="filterNotReminded">Not Reminded</button>
+                <button onclick="filterPendingList('reminded')" class="btn btn-secondary btn-sm" id="filterReminded">Already Reminded</button>
+            </div>
+
+            <div id="pendingMembersList"></div>
+            <div id="noPendingMembers" style="display: none; text-align: center; padding: 40px; color: #9ca3af;">
+                <div style="font-size: 3em; margin-bottom: 10px;">🎉</div>
+                <p>All members completed!</p>
+            </div>
+        </div>
+
+    <!-- Member Profile Modal -->
+    <div class="modal" id="profileModal">
+        <div class="modal-content">
+            <button class="modal-close" onclick="closeModal()">×</button>
+            <div class="modal-header">
+                <h2 id="modalName">Member Profile</h2>
+                <p id="modalId"></p>
+            </div>
+            <div id="modalContent"></div>
+        </div>
+    </div>
+
+    <script>
+        // ============================================================
+        // CONFIGURATION - UPDATE THESE
+        // ============================================================
+        const ADMIN_PASSWORD = "jpos2026"; // CHANGE THIS PASSWORD!
+        const MEMBER_DATA_CSV = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTRWZTl6FKePPE58wM1QrmP58Iga5wSY96ILalZikzbomhMzMeJCaXt_vUpTo0pYt7nzGmW6Tpy_xsr/pub?output=csv";
+        
+        // ============================================================
+        // GLOBAL STATE
+        // ============================================================
+        let allMembers = [];
+        let filteredMembers = [];
+        let currentPage = 1;
+        const ITEMS_PER_PAGE = 50;
+        let currentSort = { field: 'id', order: 'asc' };
+
+        // ============================================================
+        // AUTHENTICATION
+        // ============================================================
+        function login() {
+            const password = document.getElementById('passwordInput').value;
+            
+            if (password === ADMIN_PASSWORD) {
+                // Save session
+                sessionStorage.setItem('jposAdminAuth', btoa(password));
+                sessionStorage.setItem('jposLoginTime', Date.now());
+                
+                // Show dashboard
+                document.getElementById('loginScreen').style.display = 'none';
+                document.getElementById('dashboardScreen').classList.add('active');
+                
+                // Load data
+                loadMemberData();
+            } else {
+                document.getElementById('loginError').style.display = 'block';
+                document.getElementById('passwordInput').value = '';
+            }
+        }
+
+        function logout() {
+            sessionStorage.removeItem('jposAdminAuth');
+            sessionStorage.removeItem('jposLoginTime');
+            location.reload();
+        }
+
+        function checkAuth() {
+            const auth = sessionStorage.getItem('jposAdminAuth');
+            const loginTime = sessionStorage.getItem('jposLoginTime');
+            
+            if (auth && loginTime) {
+                // Check if session expired (2 hours)
+                const elapsed = Date.now() - parseInt(loginTime);
+                const twoHours = 2 * 60 * 60 * 1000;
+                
+                if (elapsed < twoHours && atob(auth) === ADMIN_PASSWORD) {
+                    document.getElementById('loginScreen').style.display = 'none';
+                    document.getElementById('dashboardScreen').classList.add('active');
+                    loadMemberData();
+                    return;
+                }
+            }
+            
+            // Not authenticated
+            sessionStorage.removeItem('jposAdminAuth');
+            sessionStorage.removeItem('jposLoginTime');
+        }
+
+        // Password input - Enter key
+        document.addEventListener('DOMContentLoaded', function() {
+            document.getElementById('passwordInput')?.addEventListener('keypress', function(e) {
+                if (e.key === 'Enter') login();
+            });
+            
+            checkAuth();
+        });
+
+        // ============================================================
+        // DATA LOADING
+        // ============================================================
+        async function loadMemberData() {
+            if (MEMBER_DATA_CSV === "PASTE_YOUR_GOOGLE_SHEET_CSV_URL_HERE") {
+                alert('Please configure the CSV URL in the script!');
+                return;
+            }
+
+            document.getElementById('loadingIndicator').style.display = 'block';
+
+            try {
+                const response = await fetch(MEMBER_DATA_CSV);
+                const csvText = await response.text();
+                
+                allMembers = parseCSV(csvText);
+                filteredMembers = [...allMembers];
+                
+                updateStats();
+                populateFilters();
+                renderTable();
+                renderCharts();
+                updateEnhancedStats();
+                renderAreaBreakdown();
+                generateReminders();
+                loadPendingMembers();
+                
+                document.getElementById('loadingIndicator').style.display = 'none';
+                
+            } catch (error) {
+                console.error('Error loading data:', error);
+                alert('Error loading member data. Check console for details.');
+                document.getElementById('loadingIndicator').style.display = 'none';
+            }
+        }
+
+        function parseCSV(csv) {
+            const lines = csv.split('\n');
+            const headers = lines[0].split(',').map(h => h.trim());
+            const members = [];
+
+            for (let i = 1; i < lines.length; i++) {
+                if (!lines[i].trim()) continue;
+                
+                const values = parseCSVLine(lines[i]);
+                const member = {};
+                
+                headers.forEach((header, index) => {
+                    member[header] = values[index] || '';
+                });
+                
+                members.push(member);
+            }
+
+            return members;
+        }
+
+        function parseCSVLine(line) {
+            const values = [];
+            let current = '';
+            let inQuotes = false;
+
+            for (let char of line) {
+                if (char === '"') {
+                    inQuotes = !inQuotes;
+                } else if (char === ',' && !inQuotes) {
+                    values.push(current.trim());
+                    current = '';
+                } else {
+                    current += char;
+                }
+            }
+            values.push(current.trim());
+            return values;
+        }
+
+        // ============================================================
+        // STATS
+        // ============================================================
+        function updateStats() {
+            const total = allMembers.length;
+            const completed = allMembers.filter(m => 
+                (m['Profile Completed'] || '').toLowerCase() === 'yes'
+            ).length;
+            const pending = total - completed;
+            const progress = total > 0 ? ((completed / total) * 100).toFixed(1) : 0;
+
+            document.getElementById('statTotal').textContent = total;
+            document.getElementById('statComplete').textContent = completed;
+            document.getElementById('statPending').textContent = pending;
+            document.getElementById('statProgress').textContent = progress + '%';
+        }
+
+        // ============================================================
+        // FILTERS
+        // ============================================================
+        function populateFilters() {
+            const areas = [...new Set(allMembers.map(m => m.Area || m.area).filter(Boolean))].sort();
+            const areaSelect = document.getElementById('filterArea');
+            
+            areas.forEach(area => {
+                const option = document.createElement('option');
+                option.value = area;
+                option.textContent = area;
+                areaSelect.appendChild(option);
+            });
+        }
+
+        function applyFilters() {
+            const searchTerm = document.getElementById('searchInput').value.toLowerCase();
+            const filterArea = document.getElementById('filterArea').value;
+            const filterStatus = document.getElementById('filterStatus').value;
+            const filterEmployment = document.getElementById('filterEmployment').value;
+
+            filteredMembers = allMembers.filter(member => {
+                // Search
+                if (searchTerm) {
+                    const searchFields = [
+                        member['Member ID'] || member['UID'],
+                        member.Name || member.name,
+                        member.Mobile || member.mobile,
+                        member.Area || member.area,
+                        member.Email || member.email
+                    ].map(f => (f || '').toString().toLowerCase());
+                    
+                    if (!searchFields.some(f => f.includes(searchTerm))) {
+                        return false;
+                    }
+                }
+
+                // Area filter
+                if (filterArea && (member.Area || member.area) !== filterArea) {
+                    return false;
+                }
+
+                // Status filter
+                if (filterStatus) {
+                    const completed = (member['Profile Completed'] || '').toLowerCase() === 'yes';
+                    if (filterStatus === 'complete' && !completed) return false;
+                    if (filterStatus === 'pending' && completed) return false;
+                }
+
+                // Employment filter
+                if (filterEmployment && (member['Employment Type'] || '') !== filterEmployment) {
+                    return false;
+                }
+
+                return true;
+            });
+
+            currentPage = 1;
+            renderTable();
+        }
+
+        function clearFilters() {
+            document.getElementById('searchInput').value = '';
+            document.getElementById('filterArea').value = '';
+            document.getElementById('filterStatus').value = '';
+            document.getElementById('filterEmployment').value = '';
+            
+            filteredMembers = [...allMembers];
+            currentPage = 1;
+            renderTable();
+        }
+
+        // Add event listeners
+        ['searchInput', 'filterArea', 'filterStatus', 'filterEmployment'].forEach(id => {
+            const elem = document.getElementById(id);
+            if (elem) {
+                elem.addEventListener('change', applyFilters);
+                if (id === 'searchInput') {
+                    elem.addEventListener('keyup', applyFilters);
+                }
+            }
+        });
+
+        // ============================================================
+        // SORTING
+        // ============================================================
+        function sortTable(field) {
+            if (currentSort.field === field) {
+                currentSort.order = currentSort.order === 'asc' ? 'desc' : 'asc';
+            } else {
+                currentSort.field = field;
+                currentSort.order = 'asc';
+            }
+
+            filteredMembers.sort((a, b) => {
+                let aVal, bVal;
+
+                switch(field) {
+                    case 'id':
+                        aVal = parseInt(a['Member ID'] || a['UID'] || 0);
+                        bVal = parseInt(b['Member ID'] || b['UID'] || 0);
+                        break;
+                    case 'name':
+                        aVal = (a.Name || a.name || '').toLowerCase();
+                        bVal = (b.Name || b.name || '').toLowerCase();
+                        break;
+                    case 'area':
+                        aVal = (a.Area || a.area || '').toLowerCase();
+                        bVal = (b.Area || b.area || '').toLowerCase();
+                        break;
+                    case 'status':
+                        aVal = (a['Profile Completed'] || '').toLowerCase() === 'yes' ? 1 : 0;
+                        bVal = (b['Profile Completed'] || '').toLowerCase() === 'yes' ? 1 : 0;
+                        break;
+                }
+
+                if (currentSort.order === 'asc') {
+                    return aVal > bVal ? 1 : -1;
+                } else {
+                    return aVal < bVal ? 1 : -1;
+                }
+            });
+
+            renderTable();
+        }
+
+        // ============================================================
+        // TABLE RENDERING
+        // ============================================================
+        function renderTable() {
+            const start = (currentPage - 1) * ITEMS_PER_PAGE;
+            const end = start + ITEMS_PER_PAGE;
+            const pageMembers = filteredMembers.slice(start, end);
+
+            const tbody = document.getElementById('tableBody');
+            tbody.innerHTML = '';
+
+            pageMembers.forEach(member => {
+                const row = tbody.insertRow();
+                
+                const memberId = member['Member ID'] || member['UID'] || '';
+                const name = member.Name || member.name || '';
+                const area = member.Area || member.area || '';
+                const mobile = member.Mobile || member.mobile || '';
+                const employment = member['Employment Type'] || '';
+                const completed = (member['Profile Completed'] || '').toLowerCase() === 'yes';
+
+                row.innerHTML = `
+                    <td><strong>${memberId}</strong></td>
+                    <td>${name}</td>
+                    <td>${area}</td>
+                    <td>${mobile}</td>
+                    <td>${employment}</td>
+                    <td><span class="status-badge ${completed ? 'status-complete' : 'status-pending'}">
+                        ${completed ? '✓ Complete' : '⏳ Pending'}
+                    </span></td>
+                    <td><button class="view-btn" onclick="viewProfile(${start + row.rowIndex - 1})">View</button></td>
+                `;
+            });
+
+            // Update results count
+            document.getElementById('resultsCount').textContent = 
+                `Showing ${start + 1}-${Math.min(end, filteredMembers.length)} of ${filteredMembers.length} members`;
+
+            // Render pagination
+            renderPagination();
+        }
+
+        function renderPagination() {
+            const totalPages = Math.ceil(filteredMembers.length / ITEMS_PER_PAGE);
+            const pagination = document.getElementById('pagination');
+            pagination.innerHTML = '';
+
+            if (totalPages <= 1) return;
+
+            // Previous button
+            const prevBtn = document.createElement('button');
+            prevBtn.textContent = '←';
+            prevBtn.className = 'page-btn';
+            prevBtn.disabled = currentPage === 1;
+            prevBtn.onclick = () => changePage(currentPage - 1);
+            pagination.appendChild(prevBtn);
+
+            // Page numbers
+            for (let i = 1; i <= Math.min(totalPages, 10); i++) {
+                const pageBtn = document.createElement('button');
+                pageBtn.textContent = i;
+                pageBtn.className = 'page-btn' + (i === currentPage ? ' active' : '');
+                pageBtn.onclick = () => changePage(i);
+                pagination.appendChild(pageBtn);
+            }
+
+            // Next button
+            const nextBtn = document.createElement('button');
+            nextBtn.textContent = '→';
+            nextBtn.className = 'page-btn';
+            nextBtn.disabled = currentPage === totalPages;
+            nextBtn.onclick = () => changePage(currentPage + 1);
+            pagination.appendChild(nextBtn);
+        }
+
+        function changePage(page) {
+            currentPage = page;
+            renderTable();
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+
+        // ============================================================
+        // MEMBER PROFILE MODAL
+        // ============================================================
+        function viewProfile(index) {
+            const member = filteredMembers[index];
+            const modal = document.getElementById('profileModal');
+            
+            document.getElementById('modalName').textContent = member.Name || member.name || 'Member';
+            document.getElementById('modalId').textContent = `ID: ${member['Member ID'] || member['UID']}`;
+
+            const content = document.getElementById('modalContent');
+            content.innerHTML = `
+                <div class="profile-grid">
+                    <div class="profile-field"><label>Name</label><strong>${member.Name || member.name || '-'}</strong></div>
+                    <div class="profile-field"><label>Surname/Gotra</label><strong>${member.Surname || member.Gotra || '-'}</strong></div>
+                    <div class="profile-field"><label>Father Name</label><strong>${member['Father Name'] || '-'}</strong></div>
+                    <div class="profile-field"><label>Native Place</label><strong>${member['Native Place'] || member.Native || '-'}</strong></div>
+                    <div class="profile-field"><label>Area</label><strong>${member.Area || member.area || '-'}</strong></div>
+                    <div class="profile-field"><label>Mobile</label><strong>${member.Mobile || member.mobile || '-'}</strong></div>
+                    <div class="profile-field"><label>WhatsApp</label><strong>${member['WhatsApp Number'] || member.Mobile || '-'}</strong></div>
+                    <div class="profile-field"><label>Email</label><strong>${member.Email || member.email || '-'}</strong></div>
+                    <div class="profile-field"><label>Date of Birth</label><strong>${member['Date of Birth'] || '-'}</strong></div>
+                    <div class="profile-field"><label>Sex</label><strong>${member.Sex || '-'}</strong></div>
+                    <div class="profile-field"><label>Education</label><strong>${member['Educational Qualification'] || '-'}</strong></div>
+                    <div class="profile-field"><label>Occupation</label><strong>${member.Occupation || '-'}</strong></div>
+                    <div class="profile-field"><label>Marital Status</label><strong>${member['Marital Status'] || '-'}</strong></div>
+                    <div class="profile-field"><label>Spouse Name</label><strong>${member['Spouse Name'] || '-'}</strong></div>
+                    <div class="profile-field"><label>Employment Type</label><strong>${member['Employment Type'] || '-'}</strong></div>
+                    <div class="profile-field"><label>Company/Business</label><strong>${member['Company Name'] || member['Business Name'] || '-'}</strong></div>
+                    <div class="profile-field"><label>Skills</label><strong>${member['Professional Skills'] || '-'}</strong></div>
+                    <div class="profile-field"><label>Interests</label><strong>${member['Areas of Interest'] || '-'}</strong></div>
+                    <div class="profile-field"><label>Profile Status</label><strong>${(member['Profile Completed'] || '').toLowerCase() === 'yes' ? '✓ Completed' : '⏳ Pending'}</strong></div>
+                    <div class="profile-field"><label>Last Updated</label><strong>${member['Last Updated'] || '-'}</strong></div>
+                </div>
+                ${member['Photo URL'] ? `<img src="${member['Photo URL']}" class="profile-photo" alt="Member Photo">` : ''}
+                ${member['Photo URL'] || member['Aadhar URL'] ? `
+                    <div style="margin-top: 20px; text-align: center; display: flex; gap: 10px; justify-content: center;">
+                        ${member['Photo URL'] ? `<a href="${member['Photo URL']}" target="_blank" class="btn btn-primary">View Photo</a>` : ''}
+                        ${member['Aadhar URL'] ? `<a href="${member['Aadhar URL']}" target="_blank" class="btn btn-primary">View Aadhar</a>` : ''}
+                    </div>
+                ` : ''}
+            `;
+
+            modal.classList.add('active');
+        }
+
+        function closeModal() {
+            document.getElementById('profileModal').classList.remove('active');
+        }
+
+        // Close modal on background click
+        document.getElementById('profileModal')?.addEventListener('click', function(e) {
+            if (e.target === this) closeModal();
+        });
+
+        // ============================================================
+        // CHARTS
+        // ============================================================
+        function renderCharts() {
+            renderAreaChart();
+            renderEmploymentChart();
+            renderCompletionChart();
+            renderMaritalChart();
+            renderAgeChart();
+            renderNativePlaceChart();
+        }
+
+        function renderAreaChart() {
+            const areaCounts = {};
+            allMembers.forEach(m => {
+                const area = m.Area || m.area || 'Unknown';
+                areaCounts[area] = (areaCounts[area] || 0) + 1;
+            });
+
+            const sortedAreas = Object.entries(areaCounts)
+                .sort((a, b) => b[1] - a[1])
+                .slice(0, 10);
+
+            new Chart(document.getElementById('areaChart'), {
+                type: 'bar',
+                data: {
+                    labels: sortedAreas.map(a => a[0]),
+                    datasets: [{
+                        label: 'Members',
+                        data: sortedAreas.map(a => a[1]),
+                        backgroundColor: '#3b82f6'
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: false }
+                    }
+                }
+            });
+        }
+
+        function renderEmploymentChart() {
+            const empCounts = {};
+            allMembers.forEach(m => {
+                const emp = m['Employment Type'] || 'Not Specified';
+                empCounts[emp] = (empCounts[emp] || 0) + 1;
+            });
+
+            new Chart(document.getElementById('employmentChart'), {
+                type: 'pie',
+                data: {
+                    labels: Object.keys(empCounts),
+                    datasets: [{
+                        data: Object.values(empCounts),
+                        backgroundColor: ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6']
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false
+                }
+            });
+        }
+
+        function renderCompletionChart() {
+            const completed = allMembers.filter(m => 
+                (m['Profile Completed'] || '').toLowerCase() === 'yes'
+            ).length;
+            const pending = allMembers.length - completed;
+
+            new Chart(document.getElementById('completionChart'), {
+                type: 'doughnut',
+                data: {
+                    labels: ['Completed', 'Pending'],
+                    datasets: [{
+                        data: [completed, pending],
+                        backgroundColor: ['#10b981', '#f59e0b']
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false
+                }
+            });
+        }
+
+        function renderMaritalChart() {
+            const maritalCounts = {};
+            allMembers.forEach(m => {
+                const status = m['Marital Status'] || 'Not Specified';
+                maritalCounts[status] = (maritalCounts[status] || 0) + 1;
+            });
+
+            new Chart(document.getElementById('maritalChart'), {
+                type: 'pie',
+                data: {
+                    labels: Object.keys(maritalCounts),
+                    datasets: [{
+                        data: Object.values(maritalCounts),
+                        backgroundColor: ['#3b82f6', '#ef4444', '#8b5cf6']
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false
+                }
+            });
+        }
+
+        // ============================================================
+        // EXPORT FUNCTIONS
+        // ============================================================
+        function exportToExcel() {
+            const ws = XLSX.utils.json_to_sheet(filteredMembers);
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, "Members");
+            XLSX.writeFile(wb, `JPOS_Members_${new Date().toISOString().split('T')[0]}.xlsx`);
+        }
+
+        function exportToCSV() {
+            const headers = Object.keys(filteredMembers[0] || {});
+            let csv = headers.join(',') + '\n';
+            
+            filteredMembers.forEach(member => {
+                const row = headers.map(h => {
+                    const val = member[h] || '';
+                    return val.includes(',') ? `"${val}"` : val;
+                });
+                csv += row.join(',') + '\n';
+            });
+
+            const blob = new Blob([csv], { type: 'text/csv' });
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `JPOS_Members_${new Date().toISOString().split('T')[0]}.csv`;
+            a.click();
+        }
+
+        function copyWhatsAppNumbers() {
+            const numbers = filteredMembers
+                .map(m => m['WhatsApp Number'] || m.Mobile || m.mobile)
+                .filter(Boolean)
+                .join('\n');
+
+            navigator.clipboard.writeText(numbers).then(() => {
+                alert(`Copied ${numbers.split('\n').length} WhatsApp numbers!`);
+            });
+        }
+
+        // ============================================================
+        // WHATSAPP INDIVIDUAL REMINDERS
+        // ============================================================
+
+        let pendingMembers = [];
+        let remindedMembers = [];
+        let currentPendingFilter = 'all';
+
+        let messageTemplate = `⚡ *JPOS Youth Wing - Urgent Update*
+
+Dear {NAME},
+
+📊 *Registration Status:*
+✅ 130+ members completed
+⏳ Only 20-25 remaining
+
+*Everyone else has finished - where are you?*
+
+🔗 Complete NOW:
+https://youthwingjpos.github.io/yjpos/
+
+🆔 *Your Member ID:* {MEMBER_ID}
+
+Upload:
+📸 Photo (mandatory)
+🆔 Aadhar (mandatory)
+
+⏱️ Takes only 10 minutes
+
+*Don't be the last one!*
+
+*Complete it TODAY!* ⚡
+
+- JPOS Youth Wing Management`;
+
+        function loadPendingMembers() {
+            pendingMembers = allMembers.filter(m => 
+                (m['Profile Completed'] || '').toLowerCase() !== 'yes'
+            );
+
+            const reminded = localStorage.getItem('jpos_reminded_members');
+            if (reminded) {
+                remindedMembers = JSON.parse(reminded);
+            }
+
+            document.getElementById('pendingCount').textContent = pendingMembers.length;
+            updateRemindedCount();
+            updateMessagePreview();
+            renderPendingMembersList();
+        }
+
+        function updateRemindedCount() {
+            document.getElementById('remindedCount').textContent = remindedMembers.length;
+        }
+
+        function updateMessagePreview() {
+            const preview = messageTemplate
+                .replace('{NAME}', 'Member Name')
+                .replace('{MEMBER_ID}', 'XXXX');
+            document.getElementById('messagePreview').textContent = preview;
+        }
+
+        function renderPendingMembersList() {
+            const container = document.getElementById('pendingMembersList');
+            const noMembersDiv = document.getElementById('noPendingMembers');
+
+            let filteredPending = [];
+            
+            if (currentPendingFilter === 'all') {
+                filteredPending = pendingMembers;
+            } else if (currentPendingFilter === 'notReminded') {
+                filteredPending = pendingMembers.filter(m => 
+                    !remindedMembers.includes(m['Member ID'] || m['UID'])
+                );
+            } else if (currentPendingFilter === 'reminded') {
+                filteredPending = pendingMembers.filter(m => 
+                    remindedMembers.includes(m['Member ID'] || m['UID'])
+                );
+            }
+
+            if (filteredPending.length === 0) {
+                container.innerHTML = '';
+                noMembersDiv.style.display = 'block';
+                return;
+            }
+
+            noMembersDiv.style.display = 'none';
+
+            container.innerHTML = filteredPending.map(member => {
+                const memberId = member['Member ID'] || member['UID'];
+                const memberName = member.Name || member.name || 'Unknown';
+                const area = member.Area || member.area || 'Unknown';
+                const mobile = member.Mobile || member.mobile || 'No mobile';
+                const whatsapp = member['WhatsApp Number'] || mobile;
+                const isReminded = remindedMembers.includes(memberId);
+
+                return `
+                    <div class="pending-member-card ${isReminded ? 'reminded' : ''}">
+                        <div class="pending-member-info">
+                            <div class="pending-member-name">
+                                ${memberName}
+                                ${isReminded ? '<span class="reminded-badge">✓ Reminded</span>' : ''}
+                            </div>
+                            <div class="pending-member-details">
+                                🆔 ${memberId} | 📍 ${area} | 📱 ${whatsapp}
+                            </div>
+                        </div>
+                        <div class="pending-member-actions">
+                            <button class="whatsapp-btn" onclick="sendWhatsAppReminder('${memberId}', '${memberName}', '${whatsapp}')">
+                                📱 WhatsApp
+                            </button>
+                            ${!isReminded ? `<button class="mark-sent-btn" onclick="markAsReminded('${memberId}')">✓ Mark</button>` : ''}
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        function sendWhatsAppReminder(memberId, memberName, mobile) {
+            const personalizedMessage = messageTemplate
+                .replace('{NAME}', memberName)
+                .replace('{MEMBER_ID}', memberId);
+
+            const cleanNumber = mobile.replace(/\D/g, '');
+            const whatsappUrl = `https://wa.me/${cleanNumber}?text=${encodeURIComponent(personalizedMessage)}`;
+            window.open(whatsappUrl, '_blank');
+
+            setTimeout(() => {
+                if (confirm(`Mark ${memberName} as reminded?`)) {
+                    markAsReminded(memberId);
+                }
+            }, 2000);
+        }
+
+        function markAsReminded(memberId) {
+            if (!remindedMembers.includes(memberId)) {
+                remindedMembers.push(memberId);
+                localStorage.setItem('jpos_reminded_members', JSON.stringify(remindedMembers));
+                updateRemindedCount();
+                renderPendingMembersList();
+            }
+        }
+
+        function sendToAllPending() {
+            const notReminded = pendingMembers.filter(m => 
+                !remindedMembers.includes(m['Member ID'] || m['UID'])
+            );
+
+            if (notReminded.length === 0) {
+                alert('All pending members reminded!');
+                return;
+            }
+
+            if (!confirm(`Open WhatsApp for ${notReminded.length} members?`)) {
+                return;
+            }
+
+            let index = 0;
+            const interval = setInterval(() => {
+                if (index >= notReminded.length) {
+                    clearInterval(interval);
+                    alert('All opened!');
+                    return;
+                }
+
+                const member = notReminded[index];
+                const memberId = member['Member ID'] || member['UID'];
+                const memberName = member.Name || member.name || 'Member';
+                const mobile = member['WhatsApp Number'] || member.Mobile || member.mobile;
+
+                if (mobile) {
+                    sendWhatsAppReminder(memberId, memberName, mobile);
+                }
+
+                index++;
+            }, 3000);
+        }
+
+        function exportPendingNumbers() {
+            const data = pendingMembers.map(m => ({
+                'Member ID': m['Member ID'] || m['UID'],
+                'Name': m.Name || m.name,
+                'Area': m.Area || m.area,
+                'Mobile': m.Mobile || m.mobile,
+                'WhatsApp': m['WhatsApp Number'] || m.Mobile || m.mobile,
+                'Reminded': remindedMembers.includes(m['Member ID'] || m['UID']) ? 'Yes' : 'No'
+            }));
+
+            const ws = XLSX.utils.json_to_sheet(data);
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, "Pending");
+            XLSX.writeFile(wb, `Pending_${new Date().toISOString().split('T')[0]}.xlsx`);
+        }
+
+        function copyPendingNumbers() {
+            const numbers = pendingMembers
+                .map(m => m['WhatsApp Number'] || m.Mobile || m.mobile)
+                .filter(Boolean)
+                .filter((v, i, a) => a.indexOf(v) === i)
+                .join('\n');
+
+            navigator.clipboard.writeText(numbers).then(() => {
+                alert(`Copied ${numbers.split('\n').length} numbers!`);
+            });
+        }
+
+        function filterPendingList(filter) {
+            currentPendingFilter = filter;
+            
+            document.getElementById('filterAll').className = 'btn btn-secondary btn-sm';
+            document.getElementById('filterNotReminded').className = 'btn btn-secondary btn-sm';
+            document.getElementById('filterReminded').className = 'btn btn-secondary btn-sm';
+            
+            if (filter === 'all') {
+                document.getElementById('filterAll').className = 'btn btn-primary btn-sm';
+            } else if (filter === 'notReminded') {
+                document.getElementById('filterNotReminded').className = 'btn btn-primary btn-sm';
+            } else if (filter === 'reminded') {
+                document.getElementById('filterReminded').className = 'btn btn-primary btn-sm';
+            }
+            
+            renderPendingMembersList();
+        }
+
+        function editMessageTemplate() {
+            const newTemplate = prompt('Edit message (use {NAME} and {MEMBER_ID}):', messageTemplate);
+            
+            if (newTemplate !== null && newTemplate.trim() !== '') {
+                messageTemplate = newTemplate;
+                localStorage.setItem('jpos_message_template', messageTemplate);
+                updateMessagePreview();
+                alert('Template updated!');
+            }
+        }
+
+        const savedTemplate = localStorage.getItem('jpos_message_template');
+        if (savedTemplate) {
+            messageTemplate = savedTemplate;
+        }
+
+
+    
+
+// ============================================================
+// CALCULATE AGE FUNCTION (REQUIRED FOR MULTIPLE FEATURES)
+// ============================================================
+
+function calculateAge(dob) {
+    if (!dob) return null;
+    const birthDate = new Date(dob);
+    const today = new Date();
+    let age = today.getFullYear() - birthDate.getFullYear();
+    const monthDiff = today.getMonth() - birthDate.getMonth();
+    if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
+        age--;
+    }
+    return age;
+}
+
+function calculateAgeFromDate(birthDate) {
+    const today = new Date();
+    let age = today.getFullYear() - birthDate.getFullYear();
+    const monthDiff = today.getMonth() - birthDate.getMonth();
+    if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
+        age--;
+    }
+    return age;
+}
+
+
+// ============================================================
+// ENHANCED QUICK STATS
+// ============================================================
+
+function updateEnhancedStats() {
+    console.log('Updating enhanced stats...');
+    
+    // Check if elements exist
+    if (!document.getElementById('avgAge')) {
+        console.log('Enhanced stats elements not found');
+        return;
+    }
+    
+    // Average Age
+    const ages = allMembers
+        .map(m => calculateAge(m['Date of Birth'] || m['DOB']))
+        .filter(age => age !== null && !isNaN(age));
+    
+    const avgAge = ages.length > 0 
+        ? Math.round(ages.reduce((a, b) => a + b, 0) / ages.length) 
+        : 0;
+    
+    document.getElementById('avgAge').textContent = avgAge > 0 ? avgAge + ' years' : 'N/A';
+
+    // Business Count
+    const businessCount = allMembers.filter(m => 
+        (m['Employment Type'] || '').toLowerCase().includes('business')
+    ).length;
+    
+    document.getElementById('businessCount').textContent = businessCount;
+
+    // Married Count
+    const marriedCount = allMembers.filter(m => 
+        (m['Marital Status'] || '').toLowerCase() === 'married'
+    ).length;
+    
+    document.getElementById('marriedCount').textContent = marriedCount;
+
+    // Top Area
+    const areaCounts = {};
+    allMembers.forEach(m => {
+        const area = m.Area || m.area || 'Unknown';
+        areaCounts[area] = (areaCounts[area] || 0) + 1;
+    });
+    
+    const topArea = Object.entries(areaCounts)
+        .sort((a, b) => b[1] - a[1])[0];
+    
+    document.getElementById('topArea').textContent = topArea 
+        ? `${topArea[0]} (${topArea[1]})` 
+        : 'N/A';
+    
+    console.log('Enhanced stats updated');
+}
+
+
+// ============================================================
+// AREA BREAKDOWN
+// ============================================================
+
+function renderAreaBreakdown() {
+    console.log('Rendering area breakdown...');
+    
+    const container = document.getElementById('areaBreakdown');
+    if (!container) {
+        console.log('Area breakdown container not found');
+        return;
+    }
+    
+    const areaGroups = {};
+    
+    allMembers.forEach(member => {
+        const area = member.Area || member.area || 'Unknown';
+        if (!areaGroups[area]) {
+            areaGroups[area] = [];
+        }
+        areaGroups[area].push(member);
+    });
+
+    const sortedAreas = Object.entries(areaGroups).sort((a, b) => b[1].length - a[1].length);
+    container.innerHTML = '';
+
+    sortedAreas.forEach(([area, members], index) => {
+        const section = document.createElement('div');
+        section.className = 'area-section';
+        section.innerHTML = `
+            <div class="area-header" onclick="toggleArea(${index})">
+                <div class="area-title">📍 ${area}</div>
+                <div class="area-count">${members.length} members</div>
+            </div>
+            <div class="area-members" id="area-${index}">
+                ${members.map(m => {
+                    const memberIndex = allMembers.findIndex(am => 
+                        (am['Member ID'] || am['UID']) === (m['Member ID'] || m['UID'])
+                    );
+                    return `
+                        <div class="member-card">
+                            <div class="member-basic">
+                                <strong>${m.Name || m.name || 'N/A'}</strong>
+                                <small>ID: ${m['Member ID'] || m['UID'] || 'N/A'} | 
+                                      Mobile: ${m.Mobile || m.mobile || 'N/A'} | 
+                                      ${(m['Profile Completed'] || '').toLowerCase() === 'yes' ? '✓ Complete' : '⏳ Pending'}
+                                </small>
+                            </div>
+                            <button class="view-btn" onclick="viewProfile(${memberIndex})">View</button>
+                        </div>
+                    `;
+                }).join('')}
+            </div>
+        `;
+        container.appendChild(section);
+    });
+    
+    console.log('Area breakdown rendered');
+}
+
+function toggleArea(index) {
+    const members = document.getElementById(`area-${index}`);
+    const header = members.previousElementSibling;
+    members.classList.toggle('show');
+    header.classList.toggle('active');
+}
+
+function toggleAllAreas() {
+    const allAreas = document.querySelectorAll('.area-members');
+    const allHeaders = document.querySelectorAll('.area-header');
+    const btn = document.getElementById('toggleAreasBtn');
+    
+    const anyExpanded = Array.from(allAreas).some(a => a.classList.contains('show'));
+    
+    if (anyExpanded) {
+        allAreas.forEach(a => a.classList.remove('show'));
+        allHeaders.forEach(h => h.classList.remove('active'));
+        btn.textContent = 'Expand All';
+    } else {
+        allAreas.forEach(a => a.classList.add('show'));
+        allHeaders.forEach(h => h.classList.add('active'));
+        btn.textContent = 'Collapse All';
+    }
+}
+
+
+// ============================================================
+// AGE DISTRIBUTION CHART
+// ============================================================
+
+function renderAgeChart() {
+    console.log('Rendering age chart...');
+    
+    const canvas = document.getElementById('ageChart');
+    if (!canvas) {
+        console.log('Age chart canvas not found');
+        return;
+    }
+    
+    const ageGroups = {
+        'Under 18': 0, '18-25': 0, '26-35': 0,
+        '36-45': 0, '46-55': 0, '56+': 0, 'Not Specified': 0
+    };
+
+    allMembers.forEach(m => {
+        const dob = m['Date of Birth'] || m['DOB'];
+        if (!dob) {
+            ageGroups['Not Specified']++;
+            return;
+        }
+        const age = calculateAge(dob);
+        if (age === null || isNaN(age)) {
+            ageGroups['Not Specified']++;
+        } else if (age < 18) ageGroups['Under 18']++;
+        else if (age <= 25) ageGroups['18-25']++;
+        else if (age <= 35) ageGroups['26-35']++;
+        else if (age <= 45) ageGroups['36-45']++;
+        else if (age <= 55) ageGroups['46-55']++;
+        else ageGroups['56+']++;
+    });
+
+    new Chart(canvas, {
+        type: 'bar',
+        data: {
+            labels: Object.keys(ageGroups),
+            datasets: [{
+                label: 'Members',
+                data: Object.values(ageGroups),
+                backgroundColor: ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#94a3b8']
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: { legend: { display: false } },
+            scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } } }
+        }
+    });
+    
+    console.log('Age chart rendered');
+}
+
+function filterByAge(range) {
+    if (range === 'all') {
+        filteredMembers = [...allMembers];
+    } else {
+        filteredMembers = allMembers.filter(m => {
+            const dob = m['Date of Birth'] || m['DOB'];
+            if (!dob) return false;
+            const age = calculateAge(dob);
+            if (age === null || isNaN(age)) return false;
+            
+            switch(range) {
+                case '18-25': return age >= 18 && age <= 25;
+                case '26-35': return age >= 26 && age <= 35;
+                case '36-45': return age >= 36 && age <= 45;
+                case '46+': return age >= 46;
+                default: return true;
+            }
+        });
+    }
+    
+    currentPage = 1;
+    renderTable();
+    
+    event.target.parentElement.querySelectorAll('.btn-sm').forEach(btn => {
+        btn.classList.remove('btn-primary');
+        btn.classList.add('btn-secondary');
+    });
+    event.target.classList.remove('btn-secondary');
+    event.target.classList.add('btn-primary');
+}
+
+
+// ============================================================
+// NATIVE PLACE CHART
+// ============================================================
+
+let nativePlaceChartInstance = null;
+
+function renderNativePlaceChart() {
+    console.log('Rendering native place chart...');
+    
+    const canvas = document.getElementById('nativePlaceChart');
+    if (!canvas) {
+        console.log('Native place chart canvas not found');
+        return;
+    }
+    
+    const nativeCounts = {};
+    allMembers.forEach(m => {
+        const native = m['Native Place'] || m['Native'] || m['native'] || 'Not Specified';
+        nativeCounts[native] = (nativeCounts[native] || 0) + 1;
+    });
+
+    const sortedNatives = Object.entries(nativeCounts).sort((a, b) => b[1] - a[1]).slice(0, 10);
+    
+    if (nativePlaceChartInstance) nativePlaceChartInstance.destroy();
+
+    nativePlaceChartInstance = new Chart(canvas, {
+        type: 'bar',
+        data: {
+            labels: sortedNatives.map(n => n[0]),
+            datasets: [{ label: 'Members', data: sortedNatives.map(n => n[1]), backgroundColor: '#10b981' }]
+        },
+        options: {
+            indexAxis: 'y',
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: { legend: { display: false } },
+            onClick: (event, elements) => {
+                if (elements.length > 0) {
+                    const index = elements[0].index;
+                    filterByNativePlace(sortedNatives[index][0]);
+                }
+            }
+        }
+    });
+
+    updateNativePlaceList(nativeCounts);
+    console.log('Native place chart rendered');
+}
+
+function updateNativePlaceList(nativeCounts) {
+    const container = document.getElementById('nativePlaceList');
+    if (!container) return;
+    
+    const sortedAll = Object.entries(nativeCounts).sort((a, b) => b[1] - a[1]);
+    
+    container.innerHTML = `
+        <div style="margin-top: 10px;">
+            <strong style="color: #374151;">All Native Places (click to filter):</strong>
+            ${sortedAll.map(([place, count]) => `
+                <div style="display: flex; justify-content: space-between; padding: 8px 5px; cursor: pointer; border-bottom: 1px solid #f3f4f6;"
+                     onclick="filterByNativePlace('${place.replace(/'/g, "\\'")}')"
+                     onmouseover="this.style.background='#f3f4f6'"
+                     onmouseout="this.style.background='white'">
+                    <span style="color: #374151;">${place}</span>
+                    <strong style="color: #3b82f6;">${count}</strong>
+                </div>
+            `).join('')}
+        </div>
+    `;
+}
+
+function filterByNativePlace(place) {
+    filteredMembers = allMembers.filter(m => {
+        const native = m['Native Place'] || m['Native'] || m['native'];
+        return native === place;
+    });
+    currentPage = 1;
+    renderTable();
+    alert(`Filtered by Native Place: ${place}\nShowing ${filteredMembers.length} members`);
+}
+
+
+// ============================================================
+// BIRTHDAY & ANNIVERSARY REMINDERS
+// ============================================================
+
+let allReminders = [];
+
+function generateReminders() {
+    console.log('Generating reminders...');
+    
+    if (!document.getElementById('remindersList')) {
+        console.log('Reminders container not found');
+        return;
+    }
+    
+    allReminders = [];
+    const today = new Date();
+
+    allMembers.forEach(member => {
+        const memberId = member['Member ID'] || member['UID'];
+        const memberName = member.Name || member.name || 'Unknown';
+        const mobile = member.Mobile || member.mobile || '';
+
+        // Member Birthday
+        const dob = member['Date of Birth'] || member['DOB'];
+        if (dob) {
+            const birthday = parseDate(dob);
+            if (birthday) {
+                const nextBirthday = getNextOccurrence(birthday, today);
+                const age = calculateAge(dob);
+                allReminders.push({
+                    memberId, name: memberName, type: 'Birthday',
+                    date: nextBirthday, daysUntil: getDaysUntil(nextBirthday, today),
+                    details: `${memberName}'s Birthday${age ? ` (Turning ${age + 1})` : ''}`,
+                    mobile, actualDate: birthday
+                });
+            }
+        }
+
+        // Marriage Anniversary
+        const marriageDate = member['Date of Marriage'];
+        const maritalStatus = (member['Marital Status'] || '').toLowerCase();
+        if (marriageDate && maritalStatus === 'married') {
+            const anniversary = parseDate(marriageDate);
+            if (anniversary) {
+                const nextAnniversary = getNextOccurrence(anniversary, today);
+                const years = today.getFullYear() - anniversary.getFullYear();
+                allReminders.push({
+                    memberId, name: memberName, type: 'Anniversary',
+                    date: nextAnniversary, daysUntil: getDaysUntil(nextAnniversary, today),
+                    details: `${memberName}'s ${years > 0 ? years + ' Year ' : ''}Wedding Anniversary`,
+                    mobile, actualDate: anniversary
+                });
+            }
+        }
+
+        // Spouse Birthday
+        const spouseDOB = member['Spouse DOB'];
+        const spouseName = member['Spouse Name'];
+        if (spouseDOB && spouseName && maritalStatus === 'married') {
+            const spouseBirthday = parseDate(spouseDOB);
+            if (spouseBirthday) {
+                const nextSpouseBday = getNextOccurrence(spouseBirthday, today);
+                allReminders.push({
+                    memberId, name: memberName, type: 'Spouse Birthday',
+                    date: nextSpouseBday, daysUntil: getDaysUntil(nextSpouseBday, today),
+                    details: `${spouseName}'s Birthday (Spouse of ${memberName})`,
+                    mobile, actualDate: spouseBirthday
+                });
+            }
+        }
+
+        // Children Birthdays
+        for (let i = 1; i <= 3; i++) {
+            const childName = member[`Child ${i} Name`];
+            const childDOB = member[`Child ${i} DOB`];
+            if (childName && childDOB) {
+                const childBirthday = parseDate(childDOB);
+                if (childBirthday) {
+                    const nextChildBday = getNextOccurrence(childBirthday, today);
+                    const childAge = calculateAgeFromDate(childBirthday);
+                    allReminders.push({
+                        memberId, name: memberName, type: 'Child Birthday',
+                        date: nextChildBday, daysUntil: getDaysUntil(nextChildBday, today),
+                        details: `${childName}'s Birthday (Child of ${memberName})${childAge !== null ? ` - Turning ${childAge + 1}` : ''}`,
+                        mobile, actualDate: childBirthday
+                    });
+                }
+            }
+        }
+    });
+
+    allReminders.sort((a, b) => a.daysUntil - b.daysUntil);
+    updateReminders();
+    updateReminderStats();
+    console.log('Reminders generated:', allReminders.length);
+}
+
+function parseDate(dateStr) {
+    if (!dateStr) return null;
+    let date = new Date(dateStr);
+    if (isNaN(date.getTime())) {
+        const parts = dateStr.split(/[-/]/);
+        if (parts.length === 3) date = new Date(parts[2], parts[1] - 1, parts[0]);
+    }
+    return isNaN(date.getTime()) ? null : date;
+}
+
+function getNextOccurrence(date, today) {
+    const nextDate = new Date(today.getFullYear(), date.getMonth(), date.getDate());
+    if (nextDate < today) nextDate.setFullYear(today.getFullYear() + 1);
+    return nextDate;
+}
+
+function getDaysUntil(futureDate, today) {
+    const oneDay = 24 * 60 * 60 * 1000;
+    const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+    const futureDateStart = new Date(futureDate.getFullYear(), futureDate.getMonth(), futureDate.getDate());
+    return Math.round((futureDateStart - todayStart) / oneDay);
+}
+
+function updateReminders() {
+    const filter = document.getElementById('reminderFilter');
+    if (!filter) return;
+    
+    const container = document.getElementById('remindersList');
+    const noRemindersDiv = document.getElementById('noReminders');
+    
+    let filteredReminders = [];
+    const filterValue = filter.value;
+    
+    switch(filterValue) {
+        case 'today': filteredReminders = allReminders.filter(r => r.daysUntil === 0); break;
+        case 'week': filteredReminders = allReminders.filter(r => r.daysUntil >= 0 && r.daysUntil <= 7); break;
+        case 'month': filteredReminders = allReminders.filter(r => r.daysUntil >= 0 && r.daysUntil <= 30); break;
+        case 'upcoming30': filteredReminders = allReminders.filter(r => r.daysUntil >= 0 && r.daysUntil <= 30); break;
+        case 'all': filteredReminders = allReminders.filter(r => r.daysUntil >= 0 && r.daysUntil <= 365); break;
+    }
+
+    if (filteredReminders.length === 0) {
+        container.innerHTML = '';
+        noRemindersDiv.style.display = 'block';
+        return;
+    }
+
+    noRemindersDiv.style.display = 'none';
+    container.innerHTML = filteredReminders.map(reminder => {
+        const cardClass = reminder.daysUntil === 0 ? 'today' : reminder.daysUntil <= 7 ? 'thisweek' : '';
+        const badgeClass = reminder.type === 'Birthday' ? 'badge-birthday' :
+                          reminder.type === 'Anniversary' ? 'badge-anniversary' :
+                          reminder.type === 'Spouse Birthday' ? 'badge-spouse' : 'badge-child';
+        const dateStr = reminder.date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+        const urgencyText = reminder.daysUntil === 0 ? '🎉 TODAY!' :
+                           reminder.daysUntil === 1 ? '⏰ TOMORROW' : `In ${reminder.daysUntil} days`;
+
+        return `
+            <div class="reminder-card ${cardClass}">
+                <div class="reminder-info">
+                    <div class="reminder-name">
+                        ${reminder.details}
+                        <span class="reminder-badge ${badgeClass}">${reminder.type}</span>
+                    </div>
+                    <div class="reminder-details">
+                        📅 ${dateStr} • ${urgencyText} • ID: ${reminder.memberId} • 📱 ${reminder.mobile || 'No mobile'}
+                    </div>
+                </div>
+                <div class="reminder-date">
+                    <div class="reminder-day">${reminder.date.getDate()}</div>
+                    <div class="reminder-month">${reminder.date.toLocaleDateString('en-US', { month: 'short' })}</div>
+                </div>
+                <div class="reminder-actions">
+                    <button class="view-btn" onclick="viewMemberByIdFromReminder('${reminder.memberId}')">View</button>
+                    ${reminder.mobile ? `<button class="btn btn-success btn-sm" onclick="sendWhatsAppReminder('${reminder.mobile}', '${reminder.name}', '${reminder.type}')">WhatsApp</button>` : ''}
+                </div>
+            </div>
+        `;
+    }).join('');
+}
+
+function updateReminderStats() {
+    const todayEl = document.getElementById('todayCount');
+    const weekEl = document.getElementById('weekCount');
+    const monthEl = document.getElementById('monthCount');
+    
+    if (todayEl) todayEl.textContent = allReminders.filter(r => r.daysUntil === 0).length;
+    if (weekEl) weekEl.textContent = allReminders.filter(r => r.daysUntil >= 0 && r.daysUntil <= 7).length;
+    if (monthEl) monthEl.textContent = allReminders.filter(r => r.daysUntil >= 0 && r.daysUntil <= 30).length;
+}
+
+function viewMemberByIdFromReminder(memberId) {
+    const memberIndex = allMembers.findIndex(m => (m['Member ID'] || m['UID']) == memberId);
+    if (memberIndex !== -1) viewProfile(memberIndex);
+}
+
+function sendWhatsAppReminder(mobile, name, type) {
+    const message = `Hi! Just a friendly reminder about ${name}'s ${type} coming up soon! 🎉`;
+    window.open(`https://wa.me/${mobile.replace(/\D/g, '')}?text=${encodeURIComponent(message)}`, '_blank');
+}
+
+function exportReminders() {
+    const filter = document.getElementById('reminderFilter').value;
+    let filteredReminders = [];
+    switch(filter) {
+        case 'today': filteredReminders = allReminders.filter(r => r.daysUntil === 0); break;
+        case 'week': filteredReminders = allReminders.filter(r => r.daysUntil >= 0 && r.daysUntil <= 7); break;
+        case 'month': filteredReminders = allReminders.filter(r => r.daysUntil >= 0 && r.daysUntil <= 30); break;
+        case 'upcoming30': filteredReminders = allReminders.filter(r => r.daysUntil >= 0 && r.daysUntil <= 30); break;
+        case 'all': filteredReminders = allReminders.filter(r => r.daysUntil >= 0 && r.daysUntil <= 365); break;
+    }
+
+    const data = filteredReminders.map(r => ({
+        'Date': r.date.toLocaleDateString(),
+        'Days Until': r.daysUntil,
+        'Type': r.type,
+        'Member Name': r.name,
+        'Member ID': r.memberId,
+        'Details': r.details,
+        'Mobile': r.mobile
+    }));
+
+    const ws = XLSX.utils.json_to_sheet(data);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Reminders");
+    XLSX.writeFile(wb, `JPOS_Reminders_${filter}_${new Date().toISOString().split('T')[0]}.xlsx`);
+}
+
+function copyReminderNumbers() {
+    const filter = document.getElementById('reminderFilter').value;
+    let filteredReminders = [];
+    switch(filter) {
+        case 'today': filteredReminders = allReminders.filter(r => r.daysUntil === 0); break;
+        case 'week': filteredReminders = allReminders.filter(r => r.daysUntil >= 0 && r.daysUntil <= 7); break;
+        case 'month': filteredReminders = allReminders.filter(r => r.daysUntil >= 0 && r.daysUntil <= 30); break;
+        case 'upcoming30': filteredReminders = allReminders.filter(r => r.daysUntil >= 0 && r.daysUntil <= 30); break;
+        case 'all': filteredReminders = allReminders.filter(r => r.daysUntil >= 0 && r.daysUntil <= 365); break;
+    }
+
+    const numbers = filteredReminders
+        .map(r => r.mobile)
+        .filter(Boolean)
+        .filter((v, i, a) => a.indexOf(v) === i)
+        .join('\n');
+
+    navigator.clipboard.writeText(numbers).then(() => {
+        alert(`Copied ${numbers.split('\n').length} unique WhatsApp numbers!`);
+    });
+}
+
+
+// ============================================================
+// WHATSAPP INDIVIDUAL REMINDERS
+// ============================================================
+
+let pendingMembers = [];
+let remindedMembers = [];
+let currentPendingFilter = 'all';
+
+let messageTemplate = `⚡ *JPOS Youth Wing - Urgent Update*
+
+Dear {NAME},
+
+📊 *Registration Status:*
+✅ 130+ members completed
+⏳ Only 20-25 remaining
+
+*Everyone else has finished - where are you?*
+
+🔗 Complete NOW:
+https://youthwingjpos.github.io/yjpos/
+
+🆔 *Your Member ID:* {MEMBER_ID}
+
+Upload:
+📸 Photo (mandatory)
+🆔 Aadhar (mandatory)
+
+⏱️ Takes only 10 minutes
+
+*Don't be the last one!*
+
+*Complete it TODAY!* ⚡
+
+- JPOS Youth Wing Management`;
+
+function loadPendingMembers() {
+    console.log('Loading pending members...');
+    
+    if (!document.getElementById('pendingMembersList')) {
+        console.log('Pending members container not found');
+        return;
+    }
+    
+    pendingMembers = allMembers.filter(m => 
+        (m['Profile Completed'] || '').toLowerCase() !== 'yes'
+    );
+
+    const reminded = localStorage.getItem('jpos_reminded_members');
+    if (reminded) {
+        remindedMembers = JSON.parse(reminded);
+    }
+
+    document.getElementById('pendingCount').textContent = pendingMembers.length;
+    updateRemindedCount();
+    updateMessagePreview();
+    renderPendingMembersList();
+    console.log('Pending members loaded:', pendingMembers.length);
+}
+
+function updateRemindedCount() {
+    const el = document.getElementById('remindedCount');
+    if (el) el.textContent = remindedMembers.length;
+}
+
+function updateMessagePreview() {
+    const el = document.getElementById('messagePreview');
+    if (el) {
+        const preview = messageTemplate
+            .replace('{NAME}', 'Member Name')
+            .replace('{MEMBER_ID}', 'XXXX');
+        el.textContent = preview;
+    }
+}
+
+function renderPendingMembersList() {
+    const container = document.getElementById('pendingMembersList');
+    const noMembersDiv = document.getElementById('noPendingMembers');
+    
+    if (!container) return;
+
+    let filteredPending = [];
+    
+    if (currentPendingFilter === 'all') {
+        filteredPending = pendingMembers;
+    } else if (currentPendingFilter === 'notReminded') {
+        filteredPending = pendingMembers.filter(m => 
+            !remindedMembers.includes(m['Member ID'] || m['UID'])
+        );
+    } else if (currentPendingFilter === 'reminded') {
+        filteredPending = pendingMembers.filter(m => 
+            remindedMembers.includes(m['Member ID'] || m['UID'])
+        );
+    }
+
+    if (filteredPending.length === 0) {
+        container.innerHTML = '';
+        if (noMembersDiv) noMembersDiv.style.display = 'block';
+        return;
+    }
+
+    if (noMembersDiv) noMembersDiv.style.display = 'none';
+
+    container.innerHTML = filteredPending.map(member => {
+        const memberId = member['Member ID'] || member['UID'];
+        const memberName = member.Name || member.name || 'Unknown';
+        const area = member.Area || member.area || 'Unknown';
+        const mobile = member.Mobile || member.mobile || 'No mobile';
+        const whatsapp = member['WhatsApp Number'] || mobile;
+        const isReminded = remindedMembers.includes(memberId);
+
+        return `
+            <div class="pending-member-card ${isReminded ? 'reminded' : ''}">
+                <div class="pending-member-info">
+                    <div class="pending-member-name">
+                        ${memberName}
+                        ${isReminded ? '<span class="reminded-badge">✓ Reminded</span>' : ''}
+                    </div>
+                    <div class="pending-member-details">
+                        🆔 ${memberId} | 📍 ${area} | 📱 ${whatsapp}
+                    </div>
+                </div>
+                <div class="pending-member-actions">
+                    <button class="whatsapp-btn" onclick="sendWhatsAppReminder('${memberId}', '${memberName}', '${whatsapp}')">
+                        📱 WhatsApp
+                    </button>
+                    ${!isReminded ? `<button class="mark-sent-btn" onclick="markAsReminded('${memberId}')">✓ Mark</button>` : ''}
+                </div>
+            </div>
+        `;
+    }).join('');
+}
+
+function sendWhatsAppReminder(memberId, memberName, mobile) {
+    const personalizedMessage = messageTemplate
+        .replace('{NAME}', memberName)
+        .replace('{MEMBER_ID}', memberId);
+
+    const cleanNumber = mobile.replace(/\D/g, '');
+    const whatsappUrl = `https://wa.me/${cleanNumber}?text=${encodeURIComponent(personalizedMessage)}`;
+    window.open(whatsappUrl, '_blank');
+
+    setTimeout(() => {
+        if (confirm(`Mark ${memberName} as reminded?`)) {
+            markAsReminded(memberId);
+        }
+    }, 2000);
+}
+
+function markAsReminded(memberId) {
+    if (!remindedMembers.includes(memberId)) {
+        remindedMembers.push(memberId);
+        localStorage.setItem('jpos_reminded_members', JSON.stringify(remindedMembers));
+        updateRemindedCount();
+        renderPendingMembersList();
+    }
+}
+
+function sendToAllPending() {
+    const notReminded = pendingMembers.filter(m => 
+        !remindedMembers.includes(m['Member ID'] || m['UID'])
+    );
+
+    if (notReminded.length === 0) {
+        alert('All pending members reminded!');
+        return;
+    }
+
+    if (!confirm(`Open WhatsApp for ${notReminded.length} members?`)) {
+        return;
+    }
+
+    let index = 0;
+    const interval = setInterval(() => {
+        if (index >= notReminded.length) {
+            clearInterval(interval);
+            alert('All opened!');
+            return;
+        }
+
+        const member = notReminded[index];
+        const memberId = member['Member ID'] || member['UID'];
+        const memberName = member.Name || member.name || 'Member';
+        const mobile = member['WhatsApp Number'] || member.Mobile || member.mobile;
+
+        if (mobile) {
+            sendWhatsAppReminder(memberId, memberName, mobile);
+        }
+
+        index++;
+    }, 3000);
+}
+
+function exportPendingNumbers() {
+    const data = pendingMembers.map(m => ({
+        'Member ID': m['Member ID'] || m['UID'],
+        'Name': m.Name || m.name,
+        'Area': m.Area || m.area,
+        'Mobile': m.Mobile || m.mobile,
+        'WhatsApp': m['WhatsApp Number'] || m.Mobile || m.mobile,
+        'Reminded': remindedMembers.includes(m['Member ID'] || m['UID']) ? 'Yes' : 'No'
+    }));
+
+    const ws = XLSX.utils.json_to_sheet(data);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Pending");
+    XLSX.writeFile(wb, `Pending_${new Date().toISOString().split('T')[0]}.xlsx`);
+}
+
+function copyPendingNumbers() {
+    const numbers = pendingMembers
+        .map(m => m['WhatsApp Number'] || m.Mobile || m.mobile)
+        .filter(Boolean)
+        .filter((v, i, a) => a.indexOf(v) === i)
+        .join('\n');
+
+    navigator.clipboard.writeText(numbers).then(() => {
+        alert(`Copied ${numbers.split('\n').length} numbers!`);
+    });
+}
+
+function filterPendingList(filter) {
+    currentPendingFilter = filter;
+    
+    document.getElementById('filterAll').className = 'btn btn-secondary btn-sm';
+    document.getElementById('filterNotReminded').className = 'btn btn-secondary btn-sm';
+    document.getElementById('filterReminded').className = 'btn btn-secondary btn-sm';
+    
+    if (filter === 'all') {
+        document.getElementById('filterAll').className = 'btn btn-primary btn-sm';
+    } else if (filter === 'notReminded') {
+        document.getElementById('filterNotReminded').className = 'btn btn-primary btn-sm';
+    } else if (filter === 'reminded') {
+        document.getElementById('filterReminded').className = 'btn btn-primary btn-sm';
+    }
+    
+    renderPendingMembersList();
+}
+
+function editMessageTemplate() {
+    const newTemplate = prompt('Edit message (use {NAME} and {MEMBER_ID}):', messageTemplate);
+    
+    if (newTemplate !== null && newTemplate.trim() !== '') {
+        messageTemplate = newTemplate;
+        localStorage.setItem('jpos_message_template', messageTemplate);
+        updateMessagePreview();
+        alert('Template updated!');
+    }
+}
+
+const savedTemplate = localStorage.getItem('jpos_message_template');
+if (savedTemplate) {
+    messageTemplate = savedTemplate;
+}
+
+console.log('All enhanced functions loaded!');
+
+
+========== END OF CODE TO ADD ==========
+
+
+NOW UPDATE THE FUNCTION CALLS:
+================================
+
+1. FIND: renderCharts() function
+   ADD these two lines at the end:
+   
+   renderAgeChart();
+   renderNativePlaceChart();
+
+2. FIND: loadMemberData() function
+   AFTER the line: renderCharts();
+   ADD these lines:
+   
+   updateEnhancedStats();
+   renderAreaBreakdown();
+   generateReminders();
+   loadPendingMembers();
+
+
+DONE! ALL FEATURES WILL WORK! ✅
+
+
+</script>
+</body>
+</html>
