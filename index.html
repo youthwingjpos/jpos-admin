@@ -563,6 +563,304 @@
             0% { transform: rotate(0deg); }
             100% { transform: rotate(360deg); }
         }
+    
+        /* ===== ENHANCED FEATURES CSS ===== */
+        .area-section {
+            margin-bottom: 15px;
+            border: 2px solid var(--gray-200);
+            border-radius: 10px;
+            overflow: hidden;
+        }
+
+        .area-header {
+            background: var(--gray-100);
+            padding: 15px 20px;
+            cursor: pointer;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            user-select: none;
+            transition: all 0.3s;
+        }
+
+        .area-header:hover {
+            background: var(--gray-200);
+        }
+
+        .area-header.active {
+            background: var(--primary);
+            color: white;
+        }
+
+        .area-title {
+            font-weight: 600;
+            font-size: 1.1em;
+        }
+
+        .area-count {
+            background: white;
+            color: var(--gray-900);
+            padding: 5px 15px;
+            border-radius: 20px;
+            font-weight: 600;
+            font-size: 0.9em;
+        }
+
+        .area-header.active .area-count {
+            background: var(--gray-900);
+            color: white;
+        }
+
+        .area-members {
+            display: none;
+            padding: 20px;
+            background: white;
+        }
+
+        .area-members.show {
+            display: block;
+        }
+
+        .member-card {
+            padding: 12px 15px;
+            background: var(--gray-50);
+            border-radius: 8px;
+            margin-bottom: 10px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .member-card:hover {
+            background: var(--gray-100);
+        }
+
+        .member-basic {
+            flex: 1;
+        }
+
+        .member-basic strong {
+            color: var(--gray-900);
+            font-size: 1.05em;
+        }
+
+        .member-basic small {
+            color: var(--gray-600);
+            display: block;
+            margin-top: 3px;
+        }
+
+        .btn-sm {
+            padding: 6px 12px;
+            font-size: 0.85em;
+            margin: 2px;
+        }
+
+        .enhanced-stat-card {
+            padding: 15px;
+            border-radius: 10px;
+        }
+
+        .photo-fallback {
+            display: none;
+            padding: 20px;
+            background: #f3f4f6;
+            border-radius: 10px;
+            text-align: center;
+        }
+
+        /* Birthday Reminders CSS */
+        .reminder-card {
+            background: white;
+            border-left: 5px solid #3b82f6;
+            padding: 15px 20px;
+            margin-bottom: 12px;
+            border-radius: 8px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            transition: all 0.3s;
+        }
+
+        .reminder-card:hover {
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            transform: translateX(5px);
+        }
+
+        .reminder-card.today {
+            border-left-color: #ef4444;
+            background: #fef2f2;
+        }
+
+        .reminder-card.thisweek {
+            border-left-color: #f59e0b;
+            background: #fffbeb;
+        }
+
+        .reminder-info {
+            flex: 1;
+        }
+
+        .reminder-name {
+            font-size: 1.1em;
+            font-weight: 600;
+            color: #111827;
+            margin-bottom: 5px;
+        }
+
+        .reminder-details {
+            color: #6b7280;
+            font-size: 0.9em;
+        }
+
+        .reminder-date {
+            text-align: right;
+            margin-right: 20px;
+        }
+
+        .reminder-day {
+            font-size: 2em;
+            font-weight: 700;
+            color: #3b82f6;
+            line-height: 1;
+        }
+
+        .reminder-card.today .reminder-day {
+            color: #ef4444;
+        }
+
+        .reminder-card.thisweek .reminder-day {
+            color: #f59e0b;
+        }
+
+        .reminder-month {
+            font-size: 0.85em;
+            color: #6b7280;
+            text-transform: uppercase;
+        }
+
+        .reminder-badge {
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 0.85em;
+            font-weight: 600;
+            margin-left: 10px;
+        }
+
+        .badge-birthday {
+            background: #dbeafe;
+            color: #1e40af;
+        }
+
+        .badge-anniversary {
+            background: #fce7f3;
+            color: #9f1239;
+        }
+
+        .badge-spouse {
+            background: #e0e7ff;
+            color: #4338ca;
+        }
+
+        .badge-child {
+            background: #d1fae5;
+            color: #065f46;
+        }
+
+        .reminder-actions {
+            display: flex;
+            gap: 8px;
+        }
+
+
+        /* WhatsApp Reminders CSS */
+        .pending-member-card {
+            background: white;
+            border: 2px solid #e5e7eb;
+            border-radius: 10px;
+            padding: 15px 20px;
+            margin-bottom: 12px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            transition: all 0.3s;
+        }
+
+        .pending-member-card:hover {
+            border-color: #3b82f6;
+            box-shadow: 0 4px 12px rgba(59, 130, 246, 0.2);
+        }
+
+        .pending-member-card.reminded {
+            background: #f0fdf4;
+            border-color: #86efac;
+        }
+
+        .pending-member-info {
+            flex: 1;
+        }
+
+        .pending-member-name {
+            font-size: 1.1em;
+            font-weight: 600;
+            color: #111827;
+            margin-bottom: 5px;
+        }
+
+        .pending-member-details {
+            color: #6b7280;
+            font-size: 0.9em;
+        }
+
+        .pending-member-actions {
+            display: flex;
+            gap: 8px;
+            align-items: center;
+        }
+
+        .reminded-badge {
+            background: #10b981;
+            color: white;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 0.85em;
+            font-weight: 600;
+        }
+
+        .whatsapp-btn {
+            background: #25D366;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            transition: all 0.3s;
+        }
+
+        .whatsapp-btn:hover {
+            background: #20BA5A;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(37, 211, 102, 0.4);
+        }
+
+        .mark-sent-btn {
+            background: #6b7280;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 0.85em;
+        }
+
+        .mark-sent-btn:hover {
+            background: #4b5563;
+        }
+
     </style>
 </head>
 <body>
@@ -627,6 +925,30 @@
                 <div class="stat-info">
                     <h3 id="statProgress">0%</h3>
                     <p>Completion Rate</p>
+                </div>
+            </div>
+        </div>
+
+
+        <!-- Enhanced Quick Stats -->
+        <div style="background: white; padding: 25px; border-radius: 15px; margin-bottom: 25px; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
+            <h3 style="margin-bottom: 20px; color: #111827;">📊 Quick Insights</h3>
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px;">
+                <div class="enhanced-stat-card" style="background: #eff6ff;">
+                    <div style="color: #1e40af; font-size: 0.9em;">Average Age</div>
+                    <div id="avgAge" style="font-size: 1.5em; font-weight: 700; color: #1e3a8a;">--</div>
+                </div>
+                <div class="enhanced-stat-card" style="background: #f0fdf4;">
+                    <div style="color: #15803d; font-size: 0.9em;">Business Owners</div>
+                    <div id="businessCount" style="font-size: 1.5em; font-weight: 700; color: #166534;">--</div>
+                </div>
+                <div class="enhanced-stat-card" style="background: #fef3c7;">
+                    <div style="color: #92400e; font-size: 0.9em;">Married Members</div>
+                    <div id="marriedCount" style="font-size: 1.5em; font-weight: 700; color: #78350f;">--</div>
+                </div>
+                <div class="enhanced-stat-card" style="background: #fce7f3;">
+                    <div style="color: #9f1239; font-size: 0.9em;">Top Area</div>
+                    <div id="topArea" style="font-size: 1.5em; font-weight: 700; color: #881337;">--</div>
                 </div>
             </div>
         </div>
@@ -717,6 +1039,126 @@
             </div>
         </div>
     </div>
+
+
+        <!-- Enhanced Analytics Charts -->
+        <div class="analytics-grid" style="margin-top: 25px;">
+            <div class="chart-card">
+                <h3>👶 Age Distribution</h3>
+                <div style="margin-bottom: 15px;">
+                    <button onclick="filterByAge('all')" class="btn btn-primary btn-sm">All</button>
+                    <button onclick="filterByAge('18-25')" class="btn btn-secondary btn-sm">18-25</button>
+                    <button onclick="filterByAge('26-35')" class="btn btn-secondary btn-sm">26-35</button>
+                    <button onclick="filterByAge('36-45')" class="btn btn-secondary btn-sm">36-45</button>
+                    <button onclick="filterByAge('46+')" class="btn btn-secondary btn-sm">46+</button>
+                </div>
+                <div class="chart-container">
+                    <canvas id="ageChart"></canvas>
+                </div>
+            </div>
+
+            <div class="chart-card">
+                <h3>🏠 Native Place Distribution</h3>
+                <div class="chart-container">
+                    <canvas id="nativePlaceChart"></canvas>
+                </div>
+                <div id="nativePlaceList" style="margin-top: 15px; max-height: 200px; overflow-y: auto; border-top: 2px solid #e5e7eb; padding-top: 10px;">
+                    <div style="color: #6b7280; font-size: 0.9em; text-align: center;">Click bars to filter</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Area Breakdown -->
+        <div class="table-container">
+            <div class="table-header">
+                <h2>📍 Members by Area - Full List</h2>
+                <button onclick="toggleAllAreas()" class="btn btn-secondary" id="toggleAreasBtn">Expand All</button>
+            </div>
+            <div id="areaBreakdown"></div>
+        </div>
+
+        <!-- Birthday & Anniversary Reminders -->
+        <div class="table-container">
+            <div class="table-header">
+                <h2>🎂 Birthday & Anniversary Reminders</h2>
+                <div style="display: flex; gap: 10px;">
+                    <select id="reminderFilter" class="filter-select" onchange="updateReminders()">
+                        <option value="today">Today</option>
+                        <option value="week" selected>This Week</option>
+                        <option value="month">This Month</option>
+                        <option value="upcoming30">Next 30 Days</option>
+                        <option value="all">All Upcoming</option>
+                    </select>
+                    <button onclick="exportReminders()" class="btn btn-success">📥 Export List</button>
+                    <button onclick="copyReminderNumbers()" class="btn btn-primary">📱 Copy WhatsApp</button>
+                </div>
+            </div>
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 15px; margin-bottom: 20px;">
+                <div style="padding: 15px; background: #fef3c7; border-radius: 10px;">
+                    <div style="color: #92400e; font-size: 0.9em;">Today</div>
+                    <div id="todayCount" style="font-size: 1.8em; font-weight: 700; color: #78350f;">0</div>
+                </div>
+                <div style="padding: 15px; background: #dbeafe; border-radius: 10px;">
+                    <div style="color: #1e40af; font-size: 0.9em;">This Week</div>
+                    <div id="weekCount" style="font-size: 1.8em; font-weight: 700; color: #1e3a8a;">0</div>
+                </div>
+                <div style="padding: 15px; background: #d1fae5; border-radius: 10px;">
+                    <div style="color: #065f46; font-size: 0.9em;">This Month</div>
+                    <div id="monthCount" style="font-size: 1.8em; font-weight: 700; color: #047857;">0</div>
+                </div>
+            </div>
+            <div id="remindersList"></div>
+            <div id="noReminders" style="display: none; text-align: center; padding: 40px; color: #9ca3af;">
+                <div style="font-size: 3em; margin-bottom: 10px;">🎉</div>
+                <p>No birthdays or anniversaries in selected period</p>
+            </div>
+        </div>
+
+
+    
+        <!-- WhatsApp Individual Reminders -->
+        <div class="table-container">
+            <div class="table-header">
+                <h2>📱 Send Individual WhatsApp Reminders</h2>
+                <div style="display: flex; gap: 10px;">
+                    <button onclick="sendToAllPending()" class="btn btn-primary">📤 Open All (Batch)</button>
+                    <button onclick="exportPendingNumbers()" class="btn btn-success">📥 Export</button>
+                    <button onclick="copyPendingNumbers()" class="btn btn-secondary">📋 Copy</button>
+                </div>
+            </div>
+
+            <div style="background: #fef3c7; padding: 15px; border-radius: 10px; margin-bottom: 20px;">
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <div>
+                        <strong style="color: #92400e; font-size: 1.2em;">Pending: </strong>
+                        <span id="pendingCount" style="color: #78350f; font-size: 1.5em; font-weight: 700;">--</span>
+                    </div>
+                    <div>
+                        <strong style="color: #92400e;">Reminded: </strong>
+                        <span id="remindedCount" style="color: #78350f; font-weight: 700;">0</span>
+                    </div>
+                </div>
+            </div>
+
+            <div style="background: #f3f4f6; padding: 15px; border-radius: 8px; margin-bottom: 20px;">
+                <strong style="color: #374151;">Message Template:</strong>
+                <div id="messagePreview" style="margin-top: 10px; padding: 10px; background: white; border-radius: 5px; font-size: 0.9em; white-space: pre-line; color: #6b7280;">Loading...</div>
+                <button onclick="editMessageTemplate()" class="btn btn-secondary btn-sm" style="margin-top: 10px;">✏️ Edit</button>
+            </div>
+
+            <div style="margin-bottom: 15px;">
+                <label style="margin-right: 10px; font-weight: 600;">Filter:</label>
+                <button onclick="filterPendingList('all')" class="btn btn-primary btn-sm" id="filterAll">All</button>
+                <button onclick="filterPendingList('notReminded')" class="btn btn-secondary btn-sm" id="filterNotReminded">Not Reminded</button>
+                <button onclick="filterPendingList('reminded')" class="btn btn-secondary btn-sm" id="filterReminded">Already Reminded</button>
+            </div>
+
+            <div id="pendingMembersList"></div>
+            <div id="noPendingMembers" style="display: none; text-align: center; padding: 40px; color: #9ca3af;">
+                <div style="font-size: 3em; margin-bottom: 10px;">🎉</div>
+                <p>All members completed!</p>
+            </div>
+        </div>
 
     <!-- Member Profile Modal -->
     <div class="modal" id="profileModal">
@@ -828,6 +1270,10 @@
                 populateFilters();
                 renderTable();
                 renderCharts();
+                updateEnhancedStats();
+                renderAreaBreakdown();
+                generateReminders();
+                loadPendingMembers();
                 
                 document.getElementById('loadingIndicator').style.display = 'none';
                 
@@ -1165,6 +1611,8 @@
             renderEmploymentChart();
             renderCompletionChart();
             renderMaritalChart();
+            renderAgeChart();
+            renderNativePlaceChart();
         }
 
         function renderAreaChart() {
@@ -1306,6 +1754,248 @@
                 alert(`Copied ${numbers.split('\n').length} WhatsApp numbers!`);
             });
         }
+
+        // ============================================================
+        // WHATSAPP INDIVIDUAL REMINDERS
+        // ============================================================
+
+        let pendingMembers = [];
+        let remindedMembers = [];
+        let currentPendingFilter = 'all';
+
+        let messageTemplate = `⚡ *JPOS Youth Wing - Urgent Update*
+
+Dear {NAME},
+
+📊 *Registration Status:*
+✅ 130+ members completed
+⏳ Only 20-25 remaining
+
+*Everyone else has finished - where are you?*
+
+🔗 Complete NOW:
+https://youthwingjpos.github.io/yjpos/
+
+🆔 *Your Member ID:* {MEMBER_ID}
+
+Upload:
+📸 Photo (mandatory)
+🆔 Aadhar (mandatory)
+
+⏱️ Takes only 10 minutes
+
+*Don't be the last one!*
+
+*Complete it TODAY!* ⚡
+
+- JPOS Youth Wing Management`;
+
+        function loadPendingMembers() {
+            pendingMembers = allMembers.filter(m => 
+                (m['Profile Completed'] || '').toLowerCase() !== 'yes'
+            );
+
+            const reminded = localStorage.getItem('jpos_reminded_members');
+            if (reminded) {
+                remindedMembers = JSON.parse(reminded);
+            }
+
+            document.getElementById('pendingCount').textContent = pendingMembers.length;
+            updateRemindedCount();
+            updateMessagePreview();
+            renderPendingMembersList();
+        }
+
+        function updateRemindedCount() {
+            document.getElementById('remindedCount').textContent = remindedMembers.length;
+        }
+
+        function updateMessagePreview() {
+            const preview = messageTemplate
+                .replace('{NAME}', 'Member Name')
+                .replace('{MEMBER_ID}', 'XXXX');
+            document.getElementById('messagePreview').textContent = preview;
+        }
+
+        function renderPendingMembersList() {
+            const container = document.getElementById('pendingMembersList');
+            const noMembersDiv = document.getElementById('noPendingMembers');
+
+            let filteredPending = [];
+            
+            if (currentPendingFilter === 'all') {
+                filteredPending = pendingMembers;
+            } else if (currentPendingFilter === 'notReminded') {
+                filteredPending = pendingMembers.filter(m => 
+                    !remindedMembers.includes(m['Member ID'] || m['UID'])
+                );
+            } else if (currentPendingFilter === 'reminded') {
+                filteredPending = pendingMembers.filter(m => 
+                    remindedMembers.includes(m['Member ID'] || m['UID'])
+                );
+            }
+
+            if (filteredPending.length === 0) {
+                container.innerHTML = '';
+                noMembersDiv.style.display = 'block';
+                return;
+            }
+
+            noMembersDiv.style.display = 'none';
+
+            container.innerHTML = filteredPending.map(member => {
+                const memberId = member['Member ID'] || member['UID'];
+                const memberName = member.Name || member.name || 'Unknown';
+                const area = member.Area || member.area || 'Unknown';
+                const mobile = member.Mobile || member.mobile || 'No mobile';
+                const whatsapp = member['WhatsApp Number'] || mobile;
+                const isReminded = remindedMembers.includes(memberId);
+
+                return `
+                    <div class="pending-member-card ${isReminded ? 'reminded' : ''}">
+                        <div class="pending-member-info">
+                            <div class="pending-member-name">
+                                ${memberName}
+                                ${isReminded ? '<span class="reminded-badge">✓ Reminded</span>' : ''}
+                            </div>
+                            <div class="pending-member-details">
+                                🆔 ${memberId} | 📍 ${area} | 📱 ${whatsapp}
+                            </div>
+                        </div>
+                        <div class="pending-member-actions">
+                            <button class="whatsapp-btn" onclick="sendWhatsAppReminder('${memberId}', '${memberName}', '${whatsapp}')">
+                                📱 WhatsApp
+                            </button>
+                            ${!isReminded ? `<button class="mark-sent-btn" onclick="markAsReminded('${memberId}')">✓ Mark</button>` : ''}
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        function sendWhatsAppReminder(memberId, memberName, mobile) {
+            const personalizedMessage = messageTemplate
+                .replace('{NAME}', memberName)
+                .replace('{MEMBER_ID}', memberId);
+
+            const cleanNumber = mobile.replace(/\D/g, '');
+            const whatsappUrl = `https://wa.me/${cleanNumber}?text=${encodeURIComponent(personalizedMessage)}`;
+            window.open(whatsappUrl, '_blank');
+
+            setTimeout(() => {
+                if (confirm(`Mark ${memberName} as reminded?`)) {
+                    markAsReminded(memberId);
+                }
+            }, 2000);
+        }
+
+        function markAsReminded(memberId) {
+            if (!remindedMembers.includes(memberId)) {
+                remindedMembers.push(memberId);
+                localStorage.setItem('jpos_reminded_members', JSON.stringify(remindedMembers));
+                updateRemindedCount();
+                renderPendingMembersList();
+            }
+        }
+
+        function sendToAllPending() {
+            const notReminded = pendingMembers.filter(m => 
+                !remindedMembers.includes(m['Member ID'] || m['UID'])
+            );
+
+            if (notReminded.length === 0) {
+                alert('All pending members reminded!');
+                return;
+            }
+
+            if (!confirm(`Open WhatsApp for ${notReminded.length} members?`)) {
+                return;
+            }
+
+            let index = 0;
+            const interval = setInterval(() => {
+                if (index >= notReminded.length) {
+                    clearInterval(interval);
+                    alert('All opened!');
+                    return;
+                }
+
+                const member = notReminded[index];
+                const memberId = member['Member ID'] || member['UID'];
+                const memberName = member.Name || member.name || 'Member';
+                const mobile = member['WhatsApp Number'] || member.Mobile || member.mobile;
+
+                if (mobile) {
+                    sendWhatsAppReminder(memberId, memberName, mobile);
+                }
+
+                index++;
+            }, 3000);
+        }
+
+        function exportPendingNumbers() {
+            const data = pendingMembers.map(m => ({
+                'Member ID': m['Member ID'] || m['UID'],
+                'Name': m.Name || m.name,
+                'Area': m.Area || m.area,
+                'Mobile': m.Mobile || m.mobile,
+                'WhatsApp': m['WhatsApp Number'] || m.Mobile || m.mobile,
+                'Reminded': remindedMembers.includes(m['Member ID'] || m['UID']) ? 'Yes' : 'No'
+            }));
+
+            const ws = XLSX.utils.json_to_sheet(data);
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, "Pending");
+            XLSX.writeFile(wb, `Pending_${new Date().toISOString().split('T')[0]}.xlsx`);
+        }
+
+        function copyPendingNumbers() {
+            const numbers = pendingMembers
+                .map(m => m['WhatsApp Number'] || m.Mobile || m.mobile)
+                .filter(Boolean)
+                .filter((v, i, a) => a.indexOf(v) === i)
+                .join('\n');
+
+            navigator.clipboard.writeText(numbers).then(() => {
+                alert(`Copied ${numbers.split('\n').length} numbers!`);
+            });
+        }
+
+        function filterPendingList(filter) {
+            currentPendingFilter = filter;
+            
+            document.getElementById('filterAll').className = 'btn btn-secondary btn-sm';
+            document.getElementById('filterNotReminded').className = 'btn btn-secondary btn-sm';
+            document.getElementById('filterReminded').className = 'btn btn-secondary btn-sm';
+            
+            if (filter === 'all') {
+                document.getElementById('filterAll').className = 'btn btn-primary btn-sm';
+            } else if (filter === 'notReminded') {
+                document.getElementById('filterNotReminded').className = 'btn btn-primary btn-sm';
+            } else if (filter === 'reminded') {
+                document.getElementById('filterReminded').className = 'btn btn-primary btn-sm';
+            }
+            
+            renderPendingMembersList();
+        }
+
+        function editMessageTemplate() {
+            const newTemplate = prompt('Edit message (use {NAME} and {MEMBER_ID}):', messageTemplate);
+            
+            if (newTemplate !== null && newTemplate.trim() !== '') {
+                messageTemplate = newTemplate;
+                localStorage.setItem('jpos_message_template', messageTemplate);
+                updateMessagePreview();
+                alert('Template updated!');
+            }
+        }
+
+        const savedTemplate = localStorage.getItem('jpos_message_template');
+        if (savedTemplate) {
+            messageTemplate = savedTemplate;
+        }
+
+
     </script>
 </body>
 </html>
