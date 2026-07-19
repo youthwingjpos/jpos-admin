@@ -861,6 +861,48 @@
             background: #4b5563;
         }
 
+
+        /* ---- Events & attendance ---- */
+        .att-yes  { color: #16a34a; font-weight: 800; font-size: 1.1em; }
+        .att-no   { color: #d1d5db; font-weight: 700; }
+        .att-rsvp { background: #fef3c7; color: #92400e; padding: 2px 8px; border-radius: 20px; font-size: 0.72em; font-weight: 700; white-space: nowrap; }
+        .ratio { padding: 4px 12px; border-radius: 20px; font-weight: 800; font-size: 0.85em; white-space: nowrap; }
+        .ratio-full { background: #d1fae5; color: #065f46; }
+        .ratio-part { background: #dbeafe; color: #1e40af; }
+        .ratio-zero { background: #fee2e2; color: #991b1b; }
+
+        .event-card { display: flex; justify-content: space-between; align-items: center; gap: 16px;
+            border: 2px solid #e5e7eb; border-radius: 12px; padding: 16px 18px; margin-bottom: 12px; flex-wrap: wrap; }
+        .event-name { font-size: 1.15em; font-weight: 700; color: #111827; }
+        .event-meta { color: #4b5563; font-size: 0.9em; margin-top: 3px; }
+        .event-desc { color: #374151; font-size: 0.9em; margin-top: 6px; }
+        .event-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+        .btn-danger-sm { padding: 10px 16px; border: none; border-radius: 8px; font-weight: 600; cursor: pointer; font-size: 0.9em; background: #fee2e2; color: #991b1b; }
+        .btn-danger-sm:hover { background: #fecaca; }
+        .ev-form { display: grid; grid-template-columns: 2fr 1fr; gap: 14px; margin-bottom: 14px; }
+        .ev-form input, .ev-form textarea { padding: 12px 15px; border: 2px solid #e5e7eb; border-radius: 8px; font-size: 0.95em; font-family: inherit; }
+        .ev-form .full { grid-column: 1 / -1; }
+        .ev-status { color: #16a34a; font-weight: 600; font-size: 0.9em; }
+
+        .att-modal { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.6); z-index: 3000; align-items: center; justify-content: center; padding: 20px; }
+        .att-modal.show { display: flex; }
+        .att-box { background: #fff; border-radius: 16px; width: 100%; max-width: 680px; max-height: 88vh; display: flex; flex-direction: column; overflow: hidden; }
+        .att-head { padding: 20px 24px; border-bottom: 1px solid #e5e7eb; display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; }
+        .att-head h2 { font-size: 1.2em; color: #111827; }
+        .att-x { cursor: pointer; font-size: 1.8em; color: #6b7280; line-height: 1; }
+        .att-tools { padding: 14px 24px; border-bottom: 1px solid #e5e7eb; display: grid; gap: 10px; }
+        .att-tools input, .att-tools textarea { width: 100%; padding: 10px 14px; border: 2px solid #e5e7eb; border-radius: 8px; font-family: inherit; font-size: 0.92em; }
+        .att-tools textarea { min-height: 62px; resize: vertical; }
+        .att-list { overflow-y: auto; padding: 8px 16px; flex: 1; }
+        .att-row { display: flex; align-items: center; gap: 12px; padding: 9px 10px; border-bottom: 1px solid #f3f4f6; cursor: pointer; border-radius: 6px; }
+        .att-row:hover { background: #f9fafb; }
+        .att-row.marked { background: #f0fdf4; }
+        .att-row input[type=checkbox] { width: 20px; height: 20px; accent-color: #16a34a; cursor: pointer; }
+        .att-uid { font-weight: 700; color: #374151; min-width: 54px; font-size: 0.9em; }
+        .att-name { flex: 1; color: #111827; font-size: 0.95em; }
+        .att-foot { padding: 16px 24px; border-top: 1px solid #e5e7eb; display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; }
+        @media (max-width: 640px) { .ev-form { grid-template-columns: 1fr; } }
+
     </style>
 </head>
 <body>
@@ -1001,6 +1043,7 @@
                         <th>Mobile</th>
                         <th>Employment</th>
                         <th onclick="sortTable('status')">Status ↕</th>
+                        <th>Attendance</th>
                         <th>Action</th>
                     </tr>
                 </thead>
@@ -1074,6 +1117,58 @@
                 <button onclick="toggleAllAreas()" class="btn btn-secondary" id="toggleAreasBtn">Expand All</button>
             </div>
             <div id="areaBreakdown"></div>
+        </div>
+
+
+        <!-- Events & Attendance -->
+        <div class="table-container">
+            <div class="table-header">
+                <h2 id="evFormTitle">📅 Add Event</h2>
+                <span class="ev-status" id="evStatus"></span>
+            </div>
+            <div class="ev-form">
+                <input type="text" id="evName" placeholder="Event name (e.g. Movie Night)">
+                <input type="date" id="evDate">
+                <textarea id="evDesc" class="full" rows="2" placeholder="Description (optional)"></textarea>
+            </div>
+            <div class="action-buttons">
+                <button onclick="saveEvent()" class="btn btn-success">💾 Save Event</button>
+                <button onclick="cancelEventEdit()" class="btn btn-secondary" id="evCancel" style="display:none;">Cancel</button>
+            </div>
+        </div>
+
+        <div class="table-container">
+            <div class="table-header">
+                <h2>📅 Events &amp; Attendance</h2>
+                <button onclick="loadEventsData()" class="btn btn-secondary">🔄 Refresh</button>
+            </div>
+            <div id="eventsList"><div style="color:#6b7280;text-align:center;padding:20px;">Loading events…</div></div>
+        </div>
+
+        <div class="att-modal" id="attModal">
+            <div class="att-box">
+                <div class="att-head">
+                    <h2 id="attTitle">Attendance</h2>
+                    <span class="att-x" onclick="closeAttendance()">&times;</span>
+                </div>
+                <div class="att-tools">
+                    <input type="text" id="attSearch" placeholder="🔍 Search members to tick…" onkeyup="renderAttendanceList()">
+                    <textarea id="attBulk" placeholder="Or paste UIDs here (comma / space / new line) — e.g. 1141 1137 1149"></textarea>
+                    <div class="action-buttons">
+                        <button class="btn btn-success" onclick="bulkMark('Attended')">✓ Mark pasted as Attended</button>
+                        <button class="btn btn-secondary" onclick="bulkMark('Absent')">RSVP’d but absent</button>
+                    </div>
+                </div>
+                <div class="att-list" id="attList"></div>
+                <div class="att-foot">
+                    <span id="attCount">0 marked as attended</span>
+                    <div style="display:flex;gap:10px;align-items:center;">
+                        <span class="ev-status" id="attStatus"></span>
+                        <button class="btn btn-secondary" onclick="closeAttendance()">Close</button>
+                        <button class="btn btn-success" onclick="saveAttendance()">💾 Save Attendance</button>
+                    </div>
+                </div>
+            </div>
         </div>
 
         <!-- Birthday & Anniversary Reminders -->
@@ -1497,6 +1592,7 @@
                     <td><span class="status-badge ${completed ? 'status-complete' : 'status-pending'}">
                         ${completed ? '✓ Complete' : '⏳ Pending'}
                     </span></td>
+                    <td>${attendanceBadge(memberId)}</td>
                     <td><button class="view-btn" onclick="viewProfile(${start + row.rowIndex - 1})">View</button></td>
                 `;
             });
@@ -2301,6 +2397,235 @@ Upload:
             navigator.clipboard.writeText(numbers).then(() => alert(`Copied ${numbers.split('\n').filter(Boolean).length} numbers!`));
         }
 
+
+
+        // ============================================================
+        // EVENTS & ATTENDANCE
+        // ============================================================
+        // Stored as two tabs in the MEMBER DATABASE spreadsheet (permanent club
+        // history). Writes go through the shared Apps Script web app.
+        const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbyT7kmCPlzf0BORlqMKhL7k8y42G5ucR9jwymg9jhoWq5uBGcIS2iiAuUl2rXb4b2bM/exec";
+        const MEMBER_SHEET_ID = "14TpqVcK3dKFRdVwT7Gq78A14CmemlSHXy-3aj2QYs3Y";
+        const EVENTS_CSV = "https://docs.google.com/spreadsheets/d/" + MEMBER_SHEET_ID + "/gviz/tq?tqx=out:csv&sheet=Events";
+        const ATT_CSV    = "https://docs.google.com/spreadsheets/d/" + MEMBER_SHEET_ID + "/gviz/tq?tqx=out:csv&sheet=Attendance";
+
+        let events = [], attendance = [], editingEventId = '';
+
+        const evGet  = (o, keys) => { for (const k of keys) if (o[k] != null && o[k] !== '') return o[k]; return ''; };
+        const evId   = e => String(evGet(e, ['Event ID','EventID','event id'])).trim();
+        const uidOf  = m => String(m['Member ID'] || m['UID'] || '').trim();
+        const nameOf = m => ((m.Name || m.name || '') + ' ' + (m.Surname || '')).trim();
+        const didAttend = st => String(st || '').trim().toLowerCase() === 'attended';
+
+        function parseEventsCSV(csv) {
+            const rows = csv.replace(/\r\n/g, '\n').split('\n').filter(l => l.trim());
+            if (rows.length < 2) return [];
+            const split = line => {
+                const out = []; let cur = '', q = false;
+                for (let i = 0; i < line.length; i++) {
+                    const c = line[i];
+                    if (c === '"') { if (q && line[i+1] === '"') { cur += '"'; i++; } else q = !q; }
+                    else if (c === ',' && !q) { out.push(cur); cur = ''; }
+                    else cur += c;
+                }
+                out.push(cur); return out;
+            };
+            const head = split(rows[0]).map(h => h.trim());
+            return rows.slice(1).map(r => {
+                const v = split(r), o = {};
+                head.forEach((h, i) => o[h] = (v[i] || '').trim());
+                return o;
+            }).filter(o => Object.values(o).some(x => x));
+        }
+
+        async function loadEventsData() {
+            const grab = async url => {
+                const res = await fetch(url + '&cachebust=' + Date.now());
+                if (!res.ok) throw new Error('HTTP ' + res.status);
+                const t = await res.text();
+                if (/<!doctype|<html/i.test(t)) throw new Error('sheet not readable');
+                return parseEventsCSV(t);
+            };
+            try { events = (await grab(EVENTS_CSV)).filter(evId); } catch (e) { events = []; }
+            try { attendance = await grab(ATT_CSV); } catch (e) { attendance = []; }
+            renderEvents();
+            if (typeof renderTable === 'function' && filteredMembers && filteredMembers.length) renderTable();
+        }
+
+        function attendanceIndex() {
+            const idx = {};
+            attendance.forEach(a => {
+                const uid = String(evGet(a, ['UID','Uid','uid'])).trim();
+                const ev  = String(evGet(a, ['Event ID','EventID'])).trim();
+                if (uid && ev) (idx[uid] = idx[uid] || {})[ev] = evGet(a, ['Status','status']) || 'Attended';
+            });
+            return idx;
+        }
+
+        /** "2/2" style badge for a member row. */
+        function attendanceBadge(uid) {
+            const total = events.length;
+            if (!total) return '<span class="ratio ratio-part">0/0</span>';
+            const rec = attendanceIndex()[String(uid).trim()] || {};
+            const n = events.filter(e => didAttend(rec[evId(e)])).length;
+            const cls = n === total ? 'ratio-full' : (n === 0 ? 'ratio-zero' : 'ratio-part');
+            return '<span class="ratio ' + cls + '">' + n + '/' + total + '</span>';
+        }
+
+        function renderEvents() {
+            const wrap = document.getElementById('eventsList');
+            if (!wrap) return;
+            if (!events.length) {
+                wrap.innerHTML = '<div style="color:#6b7280;text-align:center;padding:20px;">No events yet. Add one above.</div>';
+                return;
+            }
+            const counts = {};
+            attendance.forEach(a => {
+                const ev = String(evGet(a, ['Event ID'])).trim();
+                if (didAttend(evGet(a, ['Status']))) counts[ev] = (counts[ev] || 0) + 1;
+            });
+            wrap.innerHTML = events.map(e => {
+                const id = evId(e);
+                return '<div class="event-card"><div class="event-main">' +
+                    '<div class="event-name">' + escapeHTML(evGet(e, ['Name']) || id) + '</div>' +
+                    '<div class="event-meta">' + escapeHTML(fmtEventDate(evGet(e, ['Date']))) +
+                        ' &middot; <strong>' + (counts[id] || 0) + '</strong> attended</div>' +
+                    (evGet(e, ['Description']) ? '<div class="event-desc">' + escapeHTML(evGet(e, ['Description'])) + '</div>' : '') +
+                    '</div><div class="event-actions">' +
+                        '<button class="btn btn-primary" onclick="openAttendance(\'' + id + '\')">✓ Attendance</button>' +
+                        '<button class="btn btn-secondary" onclick="editEvent(\'' + id + '\')">Edit</button>' +
+                        '<button class="btn-danger-sm" onclick="removeEvent(\'' + id + '\')">Delete</button>' +
+                    '</div></div>';
+            }).join('');
+        }
+        function escapeHTML(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+        function fmtEventDate(d) {
+            if (!d) return 'No date';
+            const x = new Date(d);
+            return isNaN(x) ? String(d) : x.toLocaleDateString('en-IN', { day:'2-digit', month:'short', year:'numeric' });
+        }
+
+        function editEvent(id) {
+            const e = events.find(x => evId(x) === id); if (!e) return;
+            editingEventId = id;
+            document.getElementById('evName').value = evGet(e, ['Name']) || '';
+            document.getElementById('evDate').value = toInputDate(evGet(e, ['Date']));
+            document.getElementById('evDesc').value = evGet(e, ['Description']) || '';
+            document.getElementById('evFormTitle').textContent = '📅 Edit Event';
+            document.getElementById('evCancel').style.display = 'inline-block';
+            document.getElementById('evName').scrollIntoView({ behavior:'smooth', block:'center' });
+        }
+        function toInputDate(d) {
+            if (!d) return '';
+            const x = new Date(d); if (isNaN(x)) return '';
+            const p = n => String(n).padStart(2, '0');
+            return x.getFullYear() + '-' + p(x.getMonth()+1) + '-' + p(x.getDate());
+        }
+        function cancelEventEdit() {
+            editingEventId = '';
+            ['evName','evDate','evDesc'].forEach(i => document.getElementById(i).value = '');
+            document.getElementById('evFormTitle').textContent = '📅 Add Event';
+            document.getElementById('evCancel').style.display = 'none';
+        }
+
+        async function saveEvent() {
+            const name = document.getElementById('evName').value.trim();
+            if (!name) return alert('Please give the event a name.');
+            const st = document.getElementById('evStatus');
+            st.textContent = 'Saving…';
+            const res = await postJSON({ action:'saveEvent', eventId: editingEventId, name: name,
+                date: document.getElementById('evDate').value,
+                description: document.getElementById('evDesc').value.trim() });
+            st.textContent = res.success ? '✓ Saved' : ('Failed: ' + (res.error || 'unknown'));
+            if (res.success) { cancelEventEdit(); await loadEventsData(); }
+            setTimeout(() => { st.textContent = ''; }, 4000);
+        }
+
+        async function removeEvent(id) {
+            const e = events.find(x => evId(x) === id);
+            const nm = e ? (evGet(e, ['Name']) || id) : id;
+            if (!confirm('Delete "' + nm + '" and all its attendance records?\n\nThis cannot be undone.')) return;
+            const res = await postJSON({ action:'deleteEvent', eventId:id });
+            if (res.success) await loadEventsData(); else alert('Could not delete: ' + (res.error || 'unknown'));
+        }
+
+        // ---------- attendance marking ----------
+        let attEventId = '', attMarks = {};
+
+        function openAttendance(id) {
+            attEventId = id;
+            const e = events.find(x => evId(x) === id);
+            document.getElementById('attTitle').textContent = 'Attendance — ' + (e ? (evGet(e, ['Name']) || id) : id);
+            attMarks = {};
+            attendance.forEach(a => {
+                if (String(evGet(a, ['Event ID'])).trim() === id)
+                    attMarks[String(evGet(a, ['UID'])).trim()] = evGet(a, ['Status']) || 'Attended';
+            });
+            document.getElementById('attModal').classList.add('show');
+            document.getElementById('attSearch').value = '';
+            document.getElementById('attBulk').value = '';
+            renderAttendanceList();
+        }
+        function closeAttendance() { document.getElementById('attModal').classList.remove('show'); }
+
+        function renderAttendanceList() {
+            const q = document.getElementById('attSearch').value.toLowerCase();
+            const list = (allMembers || []).filter(m => !q || (uidOf(m) + ' ' + nameOf(m)).toLowerCase().includes(q));
+            document.getElementById('attList').innerHTML = list.map(m => {
+                const uid = uidOf(m), st = attMarks[uid];
+                return '<label class="att-row' + (st ? ' marked' : '') + '">' +
+                    '<input type="checkbox" ' + (didAttend(st) ? 'checked' : '') +
+                        ' onchange="toggleAttend(\'' + uid + '\', this.checked)">' +
+                    '<span class="att-uid">' + escapeHTML(uid) + '</span>' +
+                    '<span class="att-name">' + escapeHTML(nameOf(m)) + '</span>' +
+                    (st && !didAttend(st) ? '<span class="att-rsvp">RSVP, absent</span>' : '') + '</label>';
+            }).join('') || '<div style="color:#6b7280;text-align:center;padding:20px;">No members match.</div>';
+            document.getElementById('attCount').textContent =
+                Object.values(attMarks).filter(didAttend).length + ' marked as attended';
+        }
+        function toggleAttend(uid, on) {
+            if (on) attMarks[uid] = 'Attended'; else delete attMarks[uid];
+            renderAttendanceList();
+        }
+
+        function bulkMark(status) {
+            const ids = document.getElementById('attBulk').value.split(/[\s,;]+/).map(s => s.trim()).filter(Boolean);
+            if (!ids.length) return alert('Paste some UIDs first.');
+            const known = new Set((allMembers || []).map(uidOf));
+            let ok = 0; const missing = [];
+            ids.forEach(id => { if (known.has(id)) { attMarks[id] = status; ok++; } else missing.push(id); });
+            renderAttendanceList();
+            alert(ok + ' marked as "' + status + '".' +
+                (missing.length ? '\n\nNot found in the member list (' + missing.length + '): ' + missing.join(', ') : ''));
+        }
+
+        async function saveAttendance() {
+            const people = Object.keys(attMarks).map(uid => {
+                const m = (allMembers || []).find(x => uidOf(x) === uid);
+                return { uid: uid, name: m ? nameOf(m) : '', status: attMarks[uid] };
+            });
+            const st = document.getElementById('attStatus');
+            st.textContent = 'Saving ' + people.length + ' records…';
+            const res = await postJSON({ action:'saveAttendance', eventId: attEventId, people: people });
+            if (res.success) {
+                st.textContent = '✓ Saved';
+                await loadEventsData();
+                setTimeout(() => { closeAttendance(); st.textContent = ''; }, 700);
+            } else {
+                st.textContent = 'Failed: ' + (res.error || 'unknown');
+            }
+        }
+
+        // No custom Content-Type -> stays a "simple" CORS request, so the reply is readable.
+        async function postJSON(payload) {
+            try {
+                const res = await fetch(APPS_SCRIPT_URL, { method:'POST', body: JSON.stringify(payload) });
+                return await res.json();
+            } catch (e) {
+                console.error('post failed', e);
+                return { success:false, error:String(e) };
+            }
+        }
 
     </script>
 </body>
