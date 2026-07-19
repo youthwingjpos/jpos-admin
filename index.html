@@ -1372,7 +1372,11 @@
                 renderAreaBreakdown();
                 generateReminders();
                 loadPendingMembers();
-                
+
+                // Events/attendance load after the members, then re-render the
+                // directory so the Attendance column shows real ratios.
+                loadEventsData();
+
                 document.getElementById('loadingIndicator').style.display = 'none';
                 
             } catch (error) {
@@ -2446,8 +2450,19 @@ Upload:
                 if (/<!doctype|<html/i.test(t)) throw new Error('sheet not readable');
                 return parseEventsCSV(t);
             };
-            try { events = (await grab(EVENTS_CSV)).filter(evId); } catch (e) { events = []; }
-            try { attendance = await grab(ATT_CSV); } catch (e) { attendance = []; }
+            // IMPORTANT: if a named tab doesn't exist yet, Google's gviz endpoint
+            // silently returns the FIRST sheet (the whole member list) with HTTP 200
+            // instead of an error. So only keep rows that actually carry the columns
+            // these tabs are supposed to have - otherwise member rows leak in as
+            // bogus events/attendance.
+            const hasCol = (r, keys) => String(evGet(r, keys)).trim() !== '';
+            try {
+                events = (await grab(EVENTS_CSV)).filter(r => hasCol(r, ['Event ID','EventID']));
+            } catch (e) { events = []; }
+            try {
+                attendance = (await grab(ATT_CSV)).filter(r =>
+                    hasCol(r, ['Event ID','EventID']) && hasCol(r, ['UID','Uid','uid']));
+            } catch (e) { attendance = []; }
             renderEvents();
             if (typeof renderTable === 'function' && filteredMembers && filteredMembers.length) renderTable();
         }
