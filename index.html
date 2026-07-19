@@ -903,6 +903,14 @@
         .att-foot { padding: 16px 24px; border-top: 1px solid #e5e7eb; display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; }
         @media (max-width: 640px) { .ev-form { grid-template-columns: 1fr; } }
 
+
+        .mm-table { width: 100%; border-collapse: collapse; font-size: 0.9em; }
+        .mm-table th { background: #f9fafb; padding: 10px 12px; text-align: left; color: #374151; font-weight: 600; white-space: nowrap; }
+        .mm-table td { padding: 10px 12px; border-bottom: 1px solid #f3f4f6; }
+        .mm-fixed { background: #d1fae5; color: #065f46; padding: 3px 10px; border-radius: 20px; font-size: 0.85em; font-weight: 700; white-space: nowrap; }
+        .mm-bad   { background: #fee2e2; color: #991b1b; padding: 3px 10px; border-radius: 20px; font-size: 0.85em; font-weight: 700; white-space: nowrap; }
+        .mm-dupe  { background: #fef3c7; color: #92400e; padding: 3px 10px; border-radius: 20px; font-size: 0.85em; font-weight: 700; white-space: nowrap; }
+
     </style>
 </head>
 <body>
@@ -1145,6 +1153,20 @@
             <div id="eventsList"><div style="color:#6b7280;text-align:center;padding:20px;">Loading events…</div></div>
         </div>
 
+
+        <!-- Data mismatches between the JPL registrations and the member list -->
+        <div class="table-container">
+            <div class="table-header">
+                <h2>🔎 Registration Data Mismatches</h2>
+                <div id="mmSummary" style="color:#6b7280;font-size:0.9em;"></div>
+            </div>
+            <p style="color:#6b7280;font-size:0.9em;margin-bottom:12px;">
+                Rows whose UID is missing or wrong. Where the member can be identified by
+                phone or name the correct UID is <strong>accepted automatically</strong> and used for attendance.
+            </p>
+            <div id="mismatchBox"><div style="color:#6b7280;padding:14px;">Loading…</div></div>
+        </div>
+
         <div class="att-modal" id="attModal">
             <div class="att-box">
                 <div class="att-head">
@@ -1157,6 +1179,7 @@
                     <div class="action-buttons">
                         <button class="btn btn-success" onclick="bulkMark('Attended')">✓ Mark pasted as Attended</button>
                         <button class="btn btn-secondary" onclick="bulkMark('Absent')">RSVP’d but absent</button>
+                        <button class="btn btn-primary" onclick="importFromJPL()">📥 Import from JPL registrations</button>
                     </div>
                 </div>
                 <div class="att-list" id="attList"></div>
@@ -2413,6 +2436,10 @@ Upload:
         const EVENTS_CSV = "https://docs.google.com/spreadsheets/d/" + MEMBER_SHEET_ID + "/gviz/tq?tqx=out:csv&sheet=Events";
         const ATT_CSV    = "https://docs.google.com/spreadsheets/d/" + MEMBER_SHEET_ID + "/gviz/tq?tqx=out:csv&sheet=Attendance";
 
+        // Sports-meet registrations live in the JPL sheet; attendance for that event
+        // can be seeded straight from them instead of ticking 70+ people by hand.
+        const JPL_REG_CSV = "https://docs.google.com/spreadsheets/d/1yllfr4bB-vhakCkgvhQuVurSnSUp76nrNIOpW23SwTU/gviz/tq?tqx=out:csv&gid=0";
+
         let events = [], attendance = [], editingEventId = '';
 
         const evGet  = (o, keys) => { for (const k of keys) if (o[k] != null && o[k] !== '') return o[k]; return ''; };
@@ -2421,25 +2448,37 @@ Upload:
         const nameOf = m => ((m.Name || m.name || '') + ' ' + (m.Surname || '')).trim();
         const didAttend = st => String(st || '').trim().toLowerCase() === 'attended';
 
+        // Quote-aware CSV parser. Fields can legitimately contain commas AND line
+        // breaks (a Skills box with several lines, an event description), so the scan
+        // has to track quote state across the whole text rather than splitting on
+        // line breaks first - otherwise one record gets torn into several broken rows.
         function parseEventsCSV(csv) {
-            const rows = csv.replace(/\r\n/g, '\n').split('\n').filter(l => l.trim());
-            if (rows.length < 2) return [];
-            const split = line => {
-                const out = []; let cur = '', q = false;
-                for (let i = 0; i < line.length; i++) {
-                    const c = line[i];
-                    if (c === '"') { if (q && line[i+1] === '"') { cur += '"'; i++; } else q = !q; }
-                    else if (c === ',' && !q) { out.push(cur); cur = ''; }
-                    else cur += c;
+            const LF = String.fromCharCode(10), CR = String.fromCharCode(13);
+            csv = csv.split(CR + LF).join(LF).split(CR).join(LF);
+            const rows = [];
+            let row = [], cur = '', q = false;
+            for (let i = 0; i < csv.length; i++) {
+                const c = csv[i];
+                if (c === '"') {
+                    if (q && csv[i + 1] === '"') { cur += '"'; i++; }
+                    else q = !q;
+                } else if (c === ',' && !q) {
+                    row.push(cur); cur = '';
+                } else if (c === LF && !q) {
+                    row.push(cur); rows.push(row); row = []; cur = '';
+                } else {
+                    cur += c;
                 }
-                out.push(cur); return out;
-            };
-            const head = split(rows[0]).map(h => h.trim());
-            return rows.slice(1).map(r => {
-                const v = split(r), o = {};
-                head.forEach((h, i) => o[h] = (v[i] || '').trim());
+            }
+            if (cur || row.length) { row.push(cur); rows.push(row); }
+            const clean = rows.filter(r => r.some(v => String(v).trim()));
+            if (clean.length < 2) return [];
+            const head = clean[0].map(h => String(h).trim());
+            return clean.slice(1).map(r => {
+                const o = {};
+                head.forEach((h, i) => o[h] = String(r[i] == null ? '' : r[i]).trim());
                 return o;
-            }).filter(o => Object.values(o).some(x => x));
+            });
         }
 
         async function loadEventsData() {
@@ -2464,6 +2503,8 @@ Upload:
                     hasCol(r, ['Event ID','EventID']) && hasCol(r, ['UID','Uid','uid']));
             } catch (e) { attendance = []; }
             renderEvents();
+            await loadJPLRows();
+            renderMismatches();
             if (typeof renderTable === 'function' && filteredMembers && filteredMembers.length) renderTable();
         }
 
@@ -2612,6 +2653,179 @@ Upload:
             renderAttendanceList();
             alert(ok + ' marked as "' + status + '".' +
                 (missing.length ? '\n\nNot found in the member list (' + missing.length + '): ' + missing.join(', ') : ''));
+        }
+
+        /**
+         * Seeds this event's attendance from the JPL registration sheet.
+         * Only CONFIRMED registrations are marked - waiting-list entries never got a
+         * spot, and JPOSMAIN guests have no member UID, so both are reported instead
+         * of being silently included.
+         */
+        async function importFromJPL() {
+            const NL = String.fromCharCode(10);
+            try {
+                const res = await fetch(JPL_REG_CSV + '&cachebust=' + Date.now());
+                if (!res.ok) throw new Error('HTTP ' + res.status);
+                const txt = await res.text();
+                if (/<!doctype|<html/i.test(txt)) throw new Error('registration sheet not readable');
+                jplRows = parseEventsCSV(txt);
+                const lk = memberLookups();
+
+                let added = 0, waiting = 0, recovered = 0;
+                const unresolved = [];
+                jplRows.forEach(r => {
+                    const st = String(evGet(r, ['Status','status'])).trim().toLowerCase();
+                    if (st.indexOf('wait') >= 0) { waiting++; return; }
+                    const res = resolveUID(r, lk);
+                    if (!res.uid) { unresolved.push(evGet(r, ['Name','name']) || '(no name)'); return; }
+                    if (res.how !== 'direct') recovered++;
+                    attMarks[res.uid] = 'Attended';
+                    added++;
+                });
+                renderAttendanceList();
+                renderMismatches();
+                const unique = Object.keys(attMarks).length;
+                const msg = ['Imported ' + added + ' confirmed registrations (' + unique + ' unique members).'];
+                if (recovered) msg.push(recovered + ' had a missing/wrong UID and were matched by phone or name - accepted automatically.');
+                if (waiting)   msg.push('Skipped ' + waiting + ' on the waiting list.');
+                if (unresolved.length) msg.push('Could NOT identify ' + unresolved.length + ': ' + unresolved.join(', ') + ' - see Registration Data Mismatches.');
+                msg.push('Review the ticks, then press Save Attendance.');
+                alert(msg.join(NL));
+            } catch (e) {
+                alert('Could not read the JPL registration sheet: ' + e.message);
+            }
+        }
+
+        // ============================================================
+        // UID RESOLUTION + DATA MISMATCHES
+        // ============================================================
+        // Registrations are typed by hand, so a UID can be missing or wrong
+        // (e.g. "21" instead of "1021"). Before treating a row as unusable we try
+        // to recover the real member: phone first (a 10-digit mobile is the most
+        // reliable identifier), then an exact name match. A recovered UID is
+        // accepted automatically; anything still unresolved is listed for review.
+        let jplRows = [], mismatches = [];
+
+        const digits10 = v => String(v || '').replace(/[^0-9]/g, '').slice(-10);
+        const normName = v => String(v || '').toLowerCase().replace(/[^a-z]/g, '');
+
+        function memberLookups() {
+            const byUid = new Set(), byPhone = {}, byName = {};
+            (allMembers || []).forEach(m => {
+                const uid = uidOf(m);
+                if (!uid) return;
+                byUid.add(uid);
+                const p = digits10(m.Mobile || m.mobile);
+                if (p.length === 10) (byPhone[p] = byPhone[p] || []).push(uid);
+                const full = normName((m.Name || '') + (m.Surname || ''));
+                const first = normName(m.Name || '');
+                if (full)  (byName[full]  = byName[full]  || []).push(uid);
+                if (first && first !== full) (byName[first] = byName[first] || []).push(uid);
+            });
+            return { byUid, byPhone, byName };
+        }
+
+        /** -> { uid, how } where how is direct | phone | name | '' (unresolved) */
+        function resolveUID(row, lk) {
+            const raw = String(evGet(row, ['UID','Uid','uid'])).trim();
+            if (raw && lk.byUid.has(raw)) return { uid: raw, how: 'direct' };
+
+            const p = digits10(evGet(row, ['Phone','phone','Mobile']));
+            if (p.length === 10 && lk.byPhone[p] && lk.byPhone[p].length === 1)
+                return { uid: lk.byPhone[p][0], how: 'phone' };
+
+            const n = normName(evGet(row, ['Name','name']));
+            if (n && lk.byName[n] && lk.byName[n].length === 1)
+                return { uid: lk.byName[n][0], how: 'name' };
+
+            return { uid: '', how: '' };
+        }
+
+        async function loadJPLRows() {
+            try {
+                const res = await fetch(JPL_REG_CSV + '&cachebust=' + Date.now());
+                if (!res.ok) throw new Error('HTTP ' + res.status);
+                const txt = await res.text();
+                if (/<!doctype|<html/i.test(txt)) throw new Error('registration sheet not readable');
+                jplRows = parseEventsCSV(txt);
+            } catch (e) {
+                jplRows = [];
+                console.warn('JPL registrations unavailable:', e.message);
+            }
+            return jplRows;
+        }
+
+        function analyseMismatches() {
+            const lk = memberLookups();
+            const seen = {};
+            mismatches = [];
+            jplRows.forEach(r => {
+                const res = resolveUID(r, lk);
+                const rawUid = String(evGet(r, ['UID','Uid','uid'])).trim();
+                const name = evGet(r, ['Name','name']);
+                const phone = evGet(r, ['Phone','phone']);
+                const status = evGet(r, ['Status','status']) || 'Confirmed';
+
+                if (res.uid) { (seen[res.uid] = seen[res.uid] || []).push(name); }
+
+                if (res.how !== 'direct') {
+                    mismatches.push({
+                        type: res.uid ? 'resolved' : 'unresolved',
+                        name: name, phone: phone, rawUid: rawUid,
+                        uid: res.uid, how: res.how, status: status
+                    });
+                }
+            });
+            // people who registered more than once
+            Object.keys(seen).forEach(uid => {
+                if (seen[uid].length > 1) {
+                    mismatches.push({ type: 'duplicate', name: seen[uid][0], phone: '',
+                                      rawUid: uid, uid: uid, how: '', count: seen[uid].length });
+                }
+            });
+            return mismatches;
+        }
+
+        function renderMismatches() {
+            const box = document.getElementById('mismatchBox');
+            if (!box) return;
+            if (!jplRows.length) {
+                box.innerHTML = '<div style="color:#6b7280;padding:14px;">Could not read the JPL registration sheet.</div>';
+                return;
+            }
+            analyseMismatches();
+            const resolved   = mismatches.filter(m => m.type === 'resolved');
+            const unresolved = mismatches.filter(m => m.type === 'unresolved');
+            const dupes      = mismatches.filter(m => m.type === 'duplicate');
+
+            document.getElementById('mmSummary').innerHTML =
+                jplRows.length + ' registrations · ' +
+                '<span style="color:#065f46;font-weight:700;">' + resolved.length + ' auto-fixed</span> · ' +
+                '<span style="color:#991b1b;font-weight:700;">' + unresolved.length + ' unresolved</span> · ' +
+                '<span style="color:#92400e;font-weight:700;">' + dupes.length + ' duplicate</span>';
+
+            if (!mismatches.length) {
+                box.innerHTML = '<div style="color:#065f46;padding:14px;font-weight:600;">✓ No mismatches — every registration maps to a member.</div>';
+                return;
+            }
+            const row = m => {
+                if (m.type === 'duplicate')
+                    return '<tr><td><span class="mm-dupe">Duplicate</span></td><td>' + escapeHTML(m.name) +
+                        '</td><td>' + escapeHTML(m.rawUid) + '</td><td colspan="2">Registered ' + m.count +
+                        ' times — counted once</td></tr>';
+                if (m.type === 'resolved')
+                    return '<tr><td><span class="mm-fixed">Auto-fixed</span></td><td>' + escapeHTML(m.name) +
+                        '</td><td>' + (m.rawUid ? escapeHTML(m.rawUid) : '<em>blank</em>') +
+                        '</td><td><strong>' + escapeHTML(m.uid) + '</strong></td><td>matched by ' + m.how + '</td></tr>';
+                return '<tr><td><span class="mm-bad">Unresolved</span></td><td>' + escapeHTML(m.name) +
+                    '</td><td>' + (m.rawUid ? escapeHTML(m.rawUid) : '<em>blank</em>') +
+                    '</td><td>—</td><td>' + escapeHTML(m.phone || '') + ' — not in member list</td></tr>';
+            };
+            box.innerHTML =
+                '<table class="mm-table"><thead><tr><th>Issue</th><th>Name (as registered)</th>' +
+                '<th>UID on sheet</th><th>Accepted UID</th><th>Detail</th></tr></thead><tbody>' +
+                dupes.map(row).join('') + resolved.map(row).join('') + unresolved.map(row).join('') +
+                '</tbody></table>';
         }
 
         async function saveAttendance() {
