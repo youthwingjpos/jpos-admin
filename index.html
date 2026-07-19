@@ -173,6 +173,14 @@
             font-size: 1.2em;
         }
 
+        .tab-bar { display: flex; gap: 10px; margin-bottom: 25px; flex-wrap: wrap; }
+        .tab-btn {
+            padding: 12px 26px; border: none; border-radius: 10px; background: #fff;
+            color: #374151; font-weight: 600; cursor: pointer; font-size: 0.95em;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1); transition: all 0.2s;
+        }
+        .tab-btn:hover { background: #f3f4f6; }
+        .tab-btn.active { background: #16a34a; color: #fff; }
         .logout-btn {
             padding: 10px 20px;
             background: var(--danger);
@@ -947,6 +955,13 @@
             </div>
         </div>
 
+        <div class="tab-bar">
+            <button class="tab-btn active" id="tabMembersBtn" onclick="switchTab('members')">👥 Members</button>
+            <button class="tab-btn" id="tabEventsBtn" onclick="switchTab('events')">📅 Events &amp; Attendance</button>
+        </div>
+
+        <div id="viewMembers">
+
         <!-- Stats Cards -->
         <div class="stats-grid">
             <div class="stat-card">
@@ -1127,73 +1142,6 @@
             <div id="areaBreakdown"></div>
         </div>
 
-
-        <!-- Events & Attendance -->
-        <div class="table-container">
-            <div class="table-header">
-                <h2 id="evFormTitle">📅 Add Event</h2>
-                <span class="ev-status" id="evStatus"></span>
-            </div>
-            <div class="ev-form">
-                <input type="text" id="evName" placeholder="Event name (e.g. Movie Night)">
-                <input type="date" id="evDate">
-                <textarea id="evDesc" class="full" rows="2" placeholder="Description (optional)"></textarea>
-            </div>
-            <div class="action-buttons">
-                <button onclick="saveEvent()" class="btn btn-success">💾 Save Event</button>
-                <button onclick="cancelEventEdit()" class="btn btn-secondary" id="evCancel" style="display:none;">Cancel</button>
-            </div>
-        </div>
-
-        <div class="table-container">
-            <div class="table-header">
-                <h2>📅 Events &amp; Attendance</h2>
-                <button onclick="loadEventsData()" class="btn btn-secondary">🔄 Refresh</button>
-            </div>
-            <div id="eventsList"><div style="color:#6b7280;text-align:center;padding:20px;">Loading events…</div></div>
-        </div>
-
-
-        <!-- Data mismatches between the JPL registrations and the member list -->
-        <div class="table-container">
-            <div class="table-header">
-                <h2>🔎 Registration Data Mismatches</h2>
-                <div id="mmSummary" style="color:#6b7280;font-size:0.9em;"></div>
-            </div>
-            <p style="color:#6b7280;font-size:0.9em;margin-bottom:12px;">
-                Rows whose UID is missing or wrong. Where the member can be identified by
-                phone or name the correct UID is <strong>accepted automatically</strong> and used for attendance.
-            </p>
-            <div id="mismatchBox"><div style="color:#6b7280;padding:14px;">Loading…</div></div>
-        </div>
-
-        <div class="att-modal" id="attModal">
-            <div class="att-box">
-                <div class="att-head">
-                    <h2 id="attTitle">Attendance</h2>
-                    <span class="att-x" onclick="closeAttendance()">&times;</span>
-                </div>
-                <div class="att-tools">
-                    <input type="text" id="attSearch" placeholder="🔍 Search members to tick…" onkeyup="renderAttendanceList()">
-                    <textarea id="attBulk" placeholder="Or paste UIDs here (comma / space / new line) — e.g. 1141 1137 1149"></textarea>
-                    <div class="action-buttons">
-                        <button class="btn btn-success" onclick="bulkMark('Attended')">✓ Mark pasted as Attended</button>
-                        <button class="btn btn-secondary" onclick="bulkMark('Absent')">RSVP’d but absent</button>
-                        <button class="btn btn-primary" onclick="importFromJPL()">📥 Import from JPL registrations</button>
-                    </div>
-                </div>
-                <div class="att-list" id="attList"></div>
-                <div class="att-foot">
-                    <span id="attCount">0 marked as attended</span>
-                    <div style="display:flex;gap:10px;align-items:center;">
-                        <span class="ev-status" id="attStatus"></span>
-                        <button class="btn btn-secondary" onclick="closeAttendance()">Close</button>
-                        <button class="btn btn-success" onclick="saveAttendance()">💾 Save Attendance</button>
-                    </div>
-                </div>
-            </div>
-        </div>
-
         <!-- Birthday & Anniversary Reminders -->
         <div class="table-container">
             <div class="table-header">
@@ -1277,7 +1225,79 @@
             </div>
         </div>
 
+        </div><!-- end viewMembers -->
+
+        <div id="viewEvents" style="display:none;">
+
+        <!-- Events & Attendance -->
+        <div class="table-container" id="eventsSection">
+            <div class="table-header">
+                <h2 id="evFormTitle">📅 Add Event</h2>
+                <span class="ev-status" id="evStatus"></span>
+            </div>
+            <div class="ev-form">
+                <input type="text" id="evName" placeholder="Event name (e.g. Movie Night)">
+                <input type="date" id="evDate">
+                <textarea id="evDesc" class="full" rows="2" placeholder="Description (optional)"></textarea>
+            </div>
+            <div class="action-buttons">
+                <button onclick="saveEvent()" class="btn btn-success">💾 Save Event</button>
+                <button onclick="cancelEventEdit()" class="btn btn-secondary" id="evCancel" style="display:none;">Cancel</button>
+            </div>
+        </div>
+
+        <div class="table-container">
+            <div class="table-header">
+                <h2>📅 Events &amp; Attendance</h2>
+                <button onclick="loadEventsData()" class="btn btn-secondary">🔄 Refresh</button>
+            </div>
+            <div id="eventsList"><div style="color:#6b7280;text-align:center;padding:20px;">Loading events…</div></div>
+        </div>
+
+
+        <!-- Data mismatches between the JPL registrations and the member list -->
+        <div class="table-container">
+            <div class="table-header">
+                <h2>🔎 Registration Data Mismatches</h2>
+                <div id="mmSummary" style="color:#6b7280;font-size:0.9em;"></div>
+            </div>
+            <p style="color:#6b7280;font-size:0.9em;margin-bottom:12px;">
+                Rows whose UID is missing or wrong. Where the member can be identified by
+                phone or name the correct UID is <strong>accepted automatically</strong> and used for attendance.
+            </p>
+            <div id="mismatchBox"><div style="color:#6b7280;padding:14px;">Loading…</div></div>
+        </div>
+
+        </div><!-- end viewEvents -->
+
     </div><!-- end dashboard -->
+
+        <div class="att-modal" id="attModal">
+            <div class="att-box">
+                <div class="att-head">
+                    <h2 id="attTitle">Attendance</h2>
+                    <span class="att-x" onclick="closeAttendance()">&times;</span>
+                </div>
+                <div class="att-tools">
+                    <input type="text" id="attSearch" placeholder="🔍 Search members to tick…" onkeyup="renderAttendanceList()">
+                    <textarea id="attBulk" placeholder="Or paste UIDs here (comma / space / new line) — e.g. 1141 1137 1149"></textarea>
+                    <div class="action-buttons">
+                        <button class="btn btn-success" onclick="bulkMark('Attended')">✓ Mark pasted as Attended</button>
+                        <button class="btn btn-secondary" onclick="bulkMark('Absent')">RSVP’d but absent</button>
+                        <button class="btn btn-primary" onclick="importFromJPL()">📥 Import from JPL registrations</button>
+                    </div>
+                </div>
+                <div class="att-list" id="attList"></div>
+                <div class="att-foot">
+                    <span id="attCount">0 marked as attended</span>
+                    <div style="display:flex;gap:10px;align-items:center;">
+                        <span class="ev-status" id="attStatus"></span>
+                        <button class="btn btn-secondary" onclick="closeAttendance()">Close</button>
+                        <button class="btn btn-success" onclick="saveAttendance()">💾 Save Attendance</button>
+                    </div>
+                </div>
+            </div>
+        </div>
 
     <!-- Member Profile Modal -->
     <div class="modal" id="profileModal">
@@ -1328,6 +1348,15 @@
                 document.getElementById('loginError').style.display = 'block';
                 document.getElementById('passwordInput').value = '';
             }
+        }
+
+        function switchTab(tab) {
+            const members = tab === 'members';
+            document.getElementById('viewMembers').style.display = members ? 'block' : 'none';
+            document.getElementById('viewEvents').style.display  = members ? 'none' : 'block';
+            document.getElementById('tabMembersBtn').classList.toggle('active', members);
+            document.getElementById('tabEventsBtn').classList.toggle('active', !members);
+            window.scrollTo(0, 0);
         }
 
         function logout() {
