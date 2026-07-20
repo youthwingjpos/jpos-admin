@@ -917,6 +917,7 @@
         .mm-table td { padding: 10px 12px; border-bottom: 1px solid #f3f4f6; }
         .mm-fixed { background: #d1fae5; color: #065f46; padding: 3px 10px; border-radius: 20px; font-size: 0.85em; font-weight: 700; white-space: nowrap; }
         .mm-bad   { background: #fee2e2; color: #991b1b; padding: 3px 10px; border-radius: 20px; font-size: 0.85em; font-weight: 700; white-space: nowrap; }
+        .mm-guest { background: #e0e7ff; color: #3730a3; padding: 3px 10px; border-radius: 20px; font-size: 0.85em; font-weight: 700; white-space: nowrap; }
         .mm-dupe  { background: #fef3c7; color: #92400e; padding: 3px 10px; border-radius: 20px; font-size: 0.85em; font-weight: 700; white-space: nowrap; }
 
     </style>
@@ -2700,13 +2701,19 @@ Upload:
                 jplRows = parseEventsCSV(txt);
                 const lk = memberLookups();
 
-                let added = 0, waiting = 0, recovered = 0;
+                let added = 0, waiting = 0, recovered = 0, guests = 0;
                 const unresolved = [];
                 jplRows.forEach(r => {
                     const st = String(evGet(r, ['Status','status'])).trim().toLowerCase();
                     if (st.indexOf('wait') >= 0) { waiting++; return; }
                     const res = resolveUID(r, lk);
-                    if (!res.uid) { unresolved.push(evGet(r, ['Name','name']) || '(no name)'); return; }
+                    if (!res.uid) {
+                        // Guest-club players aren't Yuva members, so they can't appear in
+                        // member attendance at all - expected, not a data error.
+                        if (isGuestClub(r)) guests++;
+                        else unresolved.push(evGet(r, ['Name','name']) || '(no name)');
+                        return;
+                    }
                     if (res.how !== 'direct') recovered++;
                     attMarks[res.uid] = 'Attended';
                     added++;
@@ -2717,6 +2724,7 @@ Upload:
                 const msg = ['Imported ' + added + ' confirmed registrations (' + unique + ' unique members).'];
                 if (recovered) msg.push(recovered + ' had a missing/wrong UID and were matched by phone or name - accepted automatically.');
                 if (waiting)   msg.push('Skipped ' + waiting + ' on the waiting list.');
+                if (guests)    msg.push('Skipped ' + guests + ' guest-club players (not Yuva members, so not tracked in member attendance).');
                 if (unresolved.length) msg.push('Could NOT identify ' + unresolved.length + ': ' + unresolved.join(', ') + ' - see Registration Data Mismatches.');
                 msg.push('Review the ticks, then press Save Attendance.');
                 alert(msg.join(NL));
@@ -2784,6 +2792,15 @@ Upload:
             return jplRows;
         }
 
+        // JPOSMAIN is a DIFFERENT club within JPOS - its players are not JPOS Yuva
+        // members, so they legitimately have no member UID. Those rows must not be
+        // reported as data errors; only a Youth Wing row without a resolvable UID is
+        // a genuine problem (that person should be in the member database).
+        const isGuestClub = row => {
+            const c = String(evGet(row, ['Club','club'])).trim().toLowerCase();
+            return c !== '' && c !== 'youth wing';
+        };
+
         function analyseMismatches() {
             const lk = memberLookups();
             const seen = {};
@@ -2793,19 +2810,21 @@ Upload:
                 const rawUid = String(evGet(r, ['UID','Uid','uid'])).trim();
                 const name = evGet(r, ['Name','name']);
                 const phone = evGet(r, ['Phone','phone']);
-                const status = evGet(r, ['Status','status']) || 'Confirmed';
+                const club = evGet(r, ['Club','club']) || 'Youth Wing';
 
                 if (res.uid) { (seen[res.uid] = seen[res.uid] || []).push(name); }
 
-                if (res.how !== 'direct') {
-                    mismatches.push({
-                        type: res.uid ? 'resolved' : 'unresolved',
-                        name: name, phone: phone, rawUid: rawUid,
-                        uid: res.uid, how: res.how, status: status
-                    });
+                if (res.how === 'direct') return;             // clean match, nothing to report
+
+                if (!res.uid && isGuestClub(r)) {             // expected: guest club, no UID
+                    mismatches.push({ type: 'guest', name: name, phone: phone, rawUid: rawUid,
+                                      uid: '', how: '', club: club });
+                } else {
+                    mismatches.push({ type: res.uid ? 'resolved' : 'unresolved',
+                                      name: name, phone: phone, rawUid: rawUid,
+                                      uid: res.uid, how: res.how, club: club });
                 }
             });
-            // people who registered more than once
             Object.keys(seen).forEach(uid => {
                 if (seen[uid].length > 1) {
                     mismatches.push({ type: 'duplicate', name: seen[uid][0], phone: '',
@@ -2826,12 +2845,14 @@ Upload:
             const resolved   = mismatches.filter(m => m.type === 'resolved');
             const unresolved = mismatches.filter(m => m.type === 'unresolved');
             const dupes      = mismatches.filter(m => m.type === 'duplicate');
+            const guests     = mismatches.filter(m => m.type === 'guest');
 
             document.getElementById('mmSummary').innerHTML =
                 jplRows.length + ' registrations · ' +
                 '<span style="color:#065f46;font-weight:700;">' + resolved.length + ' auto-fixed</span> · ' +
                 '<span style="color:#991b1b;font-weight:700;">' + unresolved.length + ' unresolved</span> · ' +
-                '<span style="color:#92400e;font-weight:700;">' + dupes.length + ' duplicate</span>';
+                '<span style="color:#92400e;font-weight:700;">' + dupes.length + ' duplicate</span> · ' +
+                '<span style="color:#3730a3;font-weight:700;">' + guests.length + ' guest club</span>';
 
             if (!mismatches.length) {
                 box.innerHTML = '<div style="color:#065f46;padding:14px;font-weight:600;">✓ No mismatches — every registration maps to a member.</div>';
@@ -2846,14 +2867,19 @@ Upload:
                     return '<tr><td><span class="mm-fixed">Auto-fixed</span></td><td>' + escapeHTML(m.name) +
                         '</td><td>' + (m.rawUid ? escapeHTML(m.rawUid) : '<em>blank</em>') +
                         '</td><td><strong>' + escapeHTML(m.uid) + '</strong></td><td>matched by ' + m.how + '</td></tr>';
+                if (m.type === 'guest')
+                    return '<tr><td><span class="mm-guest">Guest club</span></td><td>' + escapeHTML(m.name) +
+                        '</td><td><em>n/a</em></td><td>—</td><td>' + escapeHTML(m.club) +
+                        ' — not a Yuva member, no UID expected</td></tr>';
                 return '<tr><td><span class="mm-bad">Unresolved</span></td><td>' + escapeHTML(m.name) +
                     '</td><td>' + (m.rawUid ? escapeHTML(m.rawUid) : '<em>blank</em>') +
-                    '</td><td>—</td><td>' + escapeHTML(m.phone || '') + ' — not in member list</td></tr>';
+                    '</td><td>—</td><td>' + escapeHTML(m.phone || '') + ' — Youth Wing row, but not in the member list</td></tr>';
             };
             box.innerHTML =
                 '<table class="mm-table"><thead><tr><th>Issue</th><th>Name (as registered)</th>' +
                 '<th>UID on sheet</th><th>Accepted UID</th><th>Detail</th></tr></thead><tbody>' +
-                dupes.map(row).join('') + resolved.map(row).join('') + unresolved.map(row).join('') +
+                dupes.map(row).join('') + resolved.map(row).join('') +
+                unresolved.map(row).join('') + guests.map(row).join('') +
                 '</tbody></table>';
         }
 
